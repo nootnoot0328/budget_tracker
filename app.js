@@ -1,6 +1,6 @@
 (function(){
 "use strict";
-var KEY="margin.v2", PREV_KEY="margin.v2.prev", APP_VERSION="2.1", ARC=386.4, FULL=515.2;
+var KEY="margin.v2", PREV_KEY="margin.v2.prev", APP_VERSION="3.2", ARC=386.4, FULL=515.2;
 var HUES=["--jade","--cyan","--amber","--violet","--pink","--lime","--blue","--coral"];
 
 function blank(){
@@ -16,7 +16,7 @@ function blank(){
       {id:"c7",name:"Other",      icon:"dots", cap:0,quick:[500,1000,2000,5000]}
     ],
     debts:[],
-    txns:[], pays:[], recs:[], bookmarks:[], accounts:[], recurring:[], recurringDone:{}, defaultAccount:""
+    txns:[], pays:[], recs:[], bookmarks:[], accounts:[], recurring:[], recurringDone:{}, defaultAccount:"", ledger:[], goals:[], goalContrib:[], imports:[], merchantRules:{}, captures:[], historicalImports:[]
   };
 }
 var S=load();
@@ -32,6 +32,17 @@ function load(){
     if(!Array.isArray(p.recurring))p.recurring=[];
     if(!p.recurringDone||typeof p.recurringDone!=="object")p.recurringDone={};
     if(!p.defaultAccount)p.defaultAccount="";
+    if(!Array.isArray(p.ledger))p.ledger=[];
+    if(!Array.isArray(p.goals))p.goals=[];
+    if(!Array.isArray(p.goalContrib))p.goalContrib=[];
+    if(!Array.isArray(p.imports))p.imports=[];
+    if(!p.merchantRules||typeof p.merchantRules!=="object")p.merchantRules={};
+    if(!Array.isArray(p.captures))p.captures=[];
+    if(!Array.isArray(p.historicalImports))p.historicalImports=[];
+    p.accounts.forEach(function(a){
+      if(a.baseBalance==null)a.baseBalance=a.balance||0;
+      if(!a.snapshotAt)a.snapshotAt=Date.now();
+    });
     if(!p.theme)p.theme="midnight"; if(!p.historyView)p.historyView="list";
     return p;
   }catch(e){ return blank(); }
@@ -176,6 +187,44 @@ function expectedIncome(a,b){ var occ=periodOccurrences(a,b).filter(function(o){
 function nextOccurrence(r){ var a=new Date(today().getFullYear(),today().getMonth(),today().getDate()-31), b=new Date(today().getFullYear()+2,today().getMonth(),today().getDate()+1); var all=occurrencesBetween(r,a,b).filter(function(o){return !o.done&&pIso(o.date)>=today();}); return all[0]||null; }
 function dateShort(ds){ var d=pIso(ds); return d.getDate()+" "+MO[d.getMonth()]; }
 function accountTypeLabel(t){ return t==="credit"?"Credit card":t==="cash"?"Cash":"Bank account"; }
+function ledgerAmountSgd(x){ return x.cur==="MYR"?Math.round((x.amount||0)/(S.rate||3.35)):(x.amount||0); }
+function accountCurrent(a){
+  var v=(a.baseBalance!=null?a.baseBalance:(a.balance||0)), snap=a.snapshotAt||0;
+  S.txns.forEach(function(t){
+    if(t.account!==a.id||!t.createdAt||t.createdAt<=snap)return;
+    v += a.type==="credit" ? (t.sgd||0) : -(t.sgd||0);
+  });
+  S.ledger.forEach(function(x){
+    if(!x.createdAt||x.createdAt<=snap)return;
+    var amt=ledgerAmountSgd(x);
+    if(x.type==="income"&&x.account===a.id) v += a.type==="credit"?-amt:amt;
+    else if(x.type==="expense"&&x.account===a.id) v += a.type==="credit"?amt:-amt;
+    else if(x.type==="refund"&&x.account===a.id) v += a.type==="credit"?-amt:amt;
+    else if(x.type==="transfer"){
+      if(x.from===a.id) v += a.type==="credit"?0:-amt;
+      if(x.to===a.id) v += a.type==="credit"?0:amt;
+    } else if(x.type==="card_payment"){
+      if(x.from===a.id) v -= amt;
+      if(x.to===a.id) v -= amt;
+    } else if(x.type==="adjustment"&&x.account===a.id) v += (x.delta||0);
+    else if(x.type==="goal"&&x.account===a.id) v -= amt;
+  });
+  return Math.round(v);
+}
+function liquidTotals(){
+  var liquid=0, credit=0;
+  S.accounts.forEach(function(a){var v=accountCurrent(a); if(a.type==="credit")credit+=v; else liquid+=v;});
+  return {liquid:liquid,credit:credit,net:liquid-credit};
+}
+function goalReserveCurrent(){
+  var ps=pStart(today()), pe=pShift(ps,1), due=0;
+  S.goals.filter(function(g){return g.active!==false;}).forEach(function(g){
+    var wanted=g.periodContribution||0, paid=0;
+    S.goalContrib.forEach(function(c){if(c.goal===g.id&&pIso(c.date)>=ps&&pIso(c.date)<pe)paid+=c.amount||0;});
+    due+=Math.max(0,wanted-paid);
+  });
+  return due;
+}
 
 /* week window anchored to period start, with carry-over */
 function weekWin(){
@@ -255,10 +304,10 @@ function drawGauge(){
   document.getElementById("gPace").textContent = left<0
     ? "Resets in "+dl+" "+(dl===1?"day":"days")
     : (reserveNow.amount?money(Math.max(0,freeNow)/dl,false)+" a day after reserved bills":money(left/dl,false)+" a day for "+dl+" more "+(dl===1?"day":"days"));
-  var reserve=reservedCommitments(ps,pe), freeAfter=left-reserve.amount;
+  var reserve=reservedCommitments(ps,pe), goalReserve=goalReserveCurrent(), freeAfter=left-reserve.amount-goalReserve;
   if(safe)safe.textContent=freeAfter>0?money(freeAfter/dl,false):"S$0";
   var cn=document.getElementById("commitmentNote");
-  if(cn){ if(reserve.count){ cn.hidden=false; cn.innerHTML=iconSvg("calendar","mini-svg")+" "+money(reserve.amount,false)+" reserved for "+reserve.count+" upcoming "+(reserve.count===1?"commitment":"commitments")+" · view Plan"; } else cn.hidden=true; }
+  if(cn){ var reservedTotal=reserve.amount+goalReserve; if(reservedTotal){ cn.hidden=false; cn.innerHTML=iconSvg("calendar","mini-svg")+" "+money(reservedTotal,false)+" reserved for upcoming commitments and goals · view Plan"; } else cn.hidden=true; }
   if(pspent)pspent.textContent=money(sp,false);
   if(reset)reset.textContent=dl+(dl===1?" day":" days");
   var ideal=Math.min(1,elapsed/pd), paceDelta=sp-(cap*ideal), usedClamp=Math.max(0,Math.min(1,used));
@@ -360,7 +409,12 @@ function setupEnvelopeDrag(wrap,handle){
 var cents=0, mode="SGD", active=null;
 function openSheet(h){
   var sb=document.getElementById("sheetBody"); sb.innerHTML=h;
-  if(sb.querySelector(".pull")) sb.querySelector(".pull").insertAdjacentHTML("afterend",'<div class="sheethint">drag down to close</div>');
+  var pull=sb.querySelector(".pull");
+  if(pull){
+    var zone=document.createElement("div"); zone.className="sheet-grab-zone";
+    pull.parentNode.insertBefore(zone,pull); zone.appendChild(pull);
+    zone.appendChild(el("div","sheethint","swipe down to close")); var xc=el("button","sheet-close","×"); xc.type="button"; xc.setAttribute("aria-label","Close"); xc.addEventListener("click",function(e){e.stopPropagation();shut();}); zone.appendChild(xc);
+  }
   sb.style.removeProperty("--sheet-drag"); document.getElementById("sheet").classList.add("on");
 }
 function shut(){
@@ -368,28 +422,44 @@ function shut(){
   sh.classList.remove("dragging"); sb.style.removeProperty("--sheet-drag"); sh.classList.remove("on");
 }
 document.getElementById("sheet").addEventListener("click",function(e){ if(e.target.id==="sheet") shut(); });
-var sheetDrag={on:false,startY:0,lastY:0,lastT:0,velocity:0,pid:null};
-document.getElementById("sheetBody").addEventListener("pointerdown",function(e){
-  if(!e.target.closest||!e.target.closest(".pull")) return;
-  sheetDrag.on=true; sheetDrag.startY=e.clientY; sheetDrag.lastY=e.clientY; sheetDrag.lastT=performance.now(); sheetDrag.velocity=0; sheetDrag.pid=e.pointerId;
+var sheetDrag={on:false,startY:0,lastY:0,lastT:0,velocity:0,pid:null,touch:false};
+function beginSheetDrag(y,pid,touch){
+  sheetDrag.on=true;sheetDrag.startY=y;sheetDrag.lastY=y;sheetDrag.lastT=performance.now();sheetDrag.velocity=0;sheetDrag.pid=pid;sheetDrag.touch=!!touch;
   document.getElementById("sheet").classList.add("dragging");
-  try{ this.setPointerCapture(e.pointerId); }catch(x){}
-});
-document.getElementById("sheetBody").addEventListener("pointermove",function(e){
-  if(!sheetDrag.on||e.pointerId!==sheetDrag.pid) return;
-  var dy=Math.max(0,e.clientY-sheetDrag.startY), now=performance.now(), dt=Math.max(1,now-sheetDrag.lastT);
-  sheetDrag.velocity=(e.clientY-sheetDrag.lastY)/dt; sheetDrag.lastY=e.clientY; sheetDrag.lastT=now;
-  this.style.setProperty("--sheet-drag",dy+"px"); e.preventDefault();
-},{passive:false});
-function finishSheetDrag(e){
-  if(!sheetDrag.on||e.pointerId!==sheetDrag.pid) return;
-  var dy=Math.max(0,e.clientY-sheetDrag.startY), close=dy>105||sheetDrag.velocity>.72;
-  sheetDrag.on=false; document.getElementById("sheet").classList.remove("dragging");
-  document.getElementById("sheetBody").style.removeProperty("--sheet-drag");
-  if(close){ haptic(7); shut(); }
 }
-document.getElementById("sheetBody").addEventListener("pointerup",finishSheetDrag);
-document.getElementById("sheetBody").addEventListener("pointercancel",finishSheetDrag);
+function moveSheetDrag(y){
+  if(!sheetDrag.on)return;
+  var dy=Math.max(0,y-sheetDrag.startY),now=performance.now(),dt=Math.max(1,now-sheetDrag.lastT);
+  sheetDrag.velocity=(y-sheetDrag.lastY)/dt;sheetDrag.lastY=y;sheetDrag.lastT=now;
+  document.getElementById("sheetBody").style.setProperty("--sheet-drag",dy+"px");
+}
+function endSheetDrag(y){
+  if(!sheetDrag.on)return;
+  var dy=Math.max(0,y-sheetDrag.startY),close=dy>72||sheetDrag.velocity>.48;
+  sheetDrag.on=false;document.getElementById("sheet").classList.remove("dragging");
+  document.getElementById("sheetBody").style.removeProperty("--sheet-drag");
+  if(close){haptic(7);shut();}
+}
+document.getElementById("sheetBody").addEventListener("pointerdown",function(e){
+  if(!e.target.closest||!e.target.closest(".sheet-grab-zone"))return;
+  beginSheetDrag(e.clientY,e.pointerId,false);try{this.setPointerCapture(e.pointerId);}catch(x){}e.preventDefault();
+},{passive:false});
+document.getElementById("sheetBody").addEventListener("pointermove",function(e){
+  if(!sheetDrag.on||sheetDrag.touch||e.pointerId!==sheetDrag.pid)return;moveSheetDrag(e.clientY);e.preventDefault();
+},{passive:false});
+document.getElementById("sheetBody").addEventListener("pointerup",function(e){if(sheetDrag.on&&!sheetDrag.touch&&e.pointerId===sheetDrag.pid)endSheetDrag(e.clientY);},{passive:false});
+document.getElementById("sheetBody").addEventListener("pointercancel",function(e){if(sheetDrag.on&&!sheetDrag.touch&&e.pointerId===sheetDrag.pid)endSheetDrag(e.clientY);},{passive:false});
+document.getElementById("sheetBody").addEventListener("touchstart",function(e){
+  if(!e.target.closest||!e.target.closest(".sheet-grab-zone")||e.target.closest(".sheet-close")||!e.touches.length)return;
+  beginSheetDrag(e.touches[0].clientY,null,true);e.preventDefault();
+},{passive:false});
+document.addEventListener("touchmove",function(e){
+  if(!sheetDrag.on||!sheetDrag.touch||!e.touches.length)return;moveSheetDrag(e.touches[0].clientY);e.preventDefault();
+},{passive:false});
+document.addEventListener("touchend",function(e){
+  if(!sheetDrag.on||!sheetDrag.touch)return;var y=e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientY:sheetDrag.lastY;endSheetDrag(y);e.preventDefault();
+},{passive:false});
+document.addEventListener("touchcancel",function(){if(sheetDrag.on&&sheetDrag.touch)endSheetDrag(sheetDrag.lastY);},{passive:false});
 document.addEventListener("keydown",function(e){ if(e.key==="Escape") shut(); });
 
 
@@ -458,7 +528,7 @@ function paint(){
 function logSpend(cid,amtCents,cur,note,account){
   var s = cur==="MYR"?Math.round(amtCents/S.rate):amtCents;
   var id=uid();
-  S.txns.push({id:id,date:iso(today()),sgd:s,cur:cur,orig:amtCents,cat:cid,note:(note||"").trim(),account:account||""});
+  S.txns.push({id:id,date:iso(today()),sgd:s,cur:cur,orig:amtCents,cat:cid,note:(note||"").trim(),account:account||"",createdAt:Date.now()});
   lastId=id; save(); redraw();
   var ps=pStart(today()), left=(catOf(cid).cap||0)-spent(ps,pShift(ps,1),cid);
   toast((cur==="SGD"?money(s):rmf(amtCents))+" · "+(left<0?money(-left,false)+" over":money(left,false)+" left"),true);
@@ -496,27 +566,253 @@ function drawQuickLogs(){
   });
 }
 
+
+/* ── notification capture inbox (3.2) ── */
+function captureCurrency(s){s=String(s||"").toUpperCase();return /\b(MYR|RM)\b/.test(s)?"MYR":"SGD";}
+function parseNotificationText(raw,meta){
+  raw=String(raw||"").replace(/\r/g,"").trim(); meta=meta||{};
+  var cur=captureCurrency((meta.cur||"")+" "+raw), amount=0;
+  var pats=cur==="MYR"?[/(?:MYR|RM)\s*([0-9][0-9,]*(?:\.\d{1,2})?)/i]:[/(?:SGD|S\$|\$)\s*([0-9][0-9,]*(?:\.\d{1,2})?)/i];
+  for(var i=0;i<pats.length;i++){var m=raw.match(pats[i]);if(m){amount=Math.round(parseFloat(m[1].replace(/,/g,""))*100);break;}}
+  if(meta.amount){var x=parseFloat(String(meta.amount).replace(/[^0-9.]/g,""));if(isFinite(x)&&x>0)amount=Math.round(x*100);}
+  var lines=raw.split(/\n+/).map(function(x){return x.trim();}).filter(Boolean),merchant=(meta.merchant||"").trim();
+  if(!merchant){
+    for(var j=0;j<lines.length;j++){
+      var ln=lines[j]; if(/^(DBS|POSB|UOB|HSBC|CIMB|OCBC)\b/i.test(ln)&&ln.length<28)continue;
+      if(/(?:SGD|S\$|MYR|RM|\$)\s*[0-9]/i.test(ln))continue;
+      if(/^(payment|transaction|card|spent|charged|purchase)\b/i.test(ln)&&ln.length<35)continue;
+      merchant=ln.replace(/,\s*(Singapore|SG).*$/i,"").trim(); if(merchant)break;
+    }
+  }
+  if(!merchant)merchant="Unknown merchant";
+  var app=(meta.app||meta.source||"").trim(),aid="";
+  if(app){var ak=app.toUpperCase();S.accounts.some(function(a){var n=a.name.toUpperCase();if(n.indexOf(ak)>=0||ak.indexOf(n.split(/\s+/)[0])>=0){aid=a.id;return true;}return false;});}
+  var cat=ruleCategory(merchant)||ruleCategory(raw)||"";
+  return {merchant:merchant,amount:amount,cur:cur,account:aid,cat:cat,raw:raw,app:app||"Notification",timestamp:meta.timestamp||new Date().toISOString()};
+}
+function captureFingerprint(c){
+  var t=new Date(c.timestamp||Date.now()),bucket=isNaN(t)?String(c.timestamp||""):t.toISOString().slice(0,16);
+  return [String(c.app||"").toUpperCase(),merchantKey(c.merchant||c.raw),c.cur,c.amount,bucket].join("|");
+}
+function addCapture(c){
+  if(!c||!(c.amount>0)){toast("Could not find a payment amount in that notification");return false;}
+  c.id=c.id||"n"+Date.now();c.status="pending";c.fingerprint=captureFingerprint(c);c.createdAt=Date.now();
+  if(S.captures.some(function(x){return x.fingerprint===c.fingerprint;})){toast("That notification is already in the inbox");return false;}
+  S.captures.unshift(c);save();redraw();toast("Payment added to Capture inbox");return true;
+}
+function pendingCaptures(){return (S.captures||[]).filter(function(c){return c.status==="pending";});}
+function drawCaptureInbox(){
+  var box=document.getElementById("captureInbox"),count=document.getElementById("captureCount");if(!box)return;box.innerHTML="";
+  var list=pendingCaptures();if(count)count.textContent=list.length+(list.length===1?" waiting":" waiting");
+  if(!list.length){box.appendChild(el("div","capture-empty","Bank-notification captures will wait here for one-tap confirmation."));return;}
+  list.slice(0,6).forEach(function(c){
+    var b=el("button","capture-card"),left=el("span","capture-left"),app=el("span","capture-app",String(c.app||"BANK").replace(/\s+.*/,"").slice(0,4).toUpperCase()),copy=el("span","capture-copy");
+    copy.appendChild(el("b",null,c.merchant||"Unknown merchant"));copy.appendChild(el("span",null,(c.account?accountName(c.account):"Choose account")+" · "+dateShort((c.timestamp||"").slice(0,10)||iso(today()))));left.appendChild(app);left.appendChild(copy);b.appendChild(left);
+    b.appendChild(el("span","capture-amt tab",c.cur==="MYR"?rmf(c.amount):money(c.amount)));b.onclick=function(){openCapture(c.id);};box.appendChild(b);
+  });
+}
+function openCapture(id){
+  var c=(S.captures||[]).find(function(x){return x.id===id;});if(!c)return;
+  var cat=c.cat||ruleCategory(c.merchant||c.raw)||((S.cats[0]||{}).id||"");
+  var copts=S.cats.map(function(x){return '<option value="'+x.id+'"'+(x.id===cat?' selected':'')+'>'+esc(x.name)+'</option>';}).join("");
+  openSheet('<div class="pull"></div><b style="font-size:17px">Confirm captured payment</b><div class="capture-parse"><b>'+esc(c.merchant||"Unknown merchant")+'</b><small>'+esc(c.app||"Notification")+' · '+(c.cur==="MYR"?rmf(c.amount):money(c.amount))+'</small></div>'+accountSelectHtml("capAccount",c.account||S.defaultAccount||"","Paid from")+'<div class="field"><label for="capCat">Envelope</label><select id="capCat">'+copts+'</select></div><label class="toggle-row compact"><input id="capRemember" type="checkbox" checked><span><b>Remember this merchant</b><small>Suggest this envelope next time.</small></span></label><button class="go" id="capConfirm">Confirm spending</button><button class="sm" id="capMovement" style="width:100%;margin-top:8px">Transfer / card payment</button><button class="flat" id="capIgnore">Ignore</button>');
+  document.getElementById("capConfirm").onclick=function(){var aid=document.getElementById("capAccount").value,catid=document.getElementById("capCat").value,sgd=c.cur==="MYR"?Math.round(c.amount/S.rate):c.amount;S.txns.push({id:uid(),date:(c.timestamp||iso(today())).slice(0,10),sgd:sgd,cur:c.cur,orig:c.amount,cat:catid,note:c.merchant,account:aid,createdAt:Date.now(),source:"notification",captureId:c.id});if(document.getElementById("capRemember").checked)rememberRule(c.merchant,catid);if(aid)S.defaultAccount=aid;c.status="confirmed";save();shut();redraw();toast("Captured payment logged");};
+  document.getElementById("capMovement").onclick=function(){openCaptureMovement(c);};
+  document.getElementById("capIgnore").onclick=function(){c.status="ignored";save();shut();redraw();toast("Capture ignored");};
+}
+function openCaptureMovement(c){
+  var opts=ledgerAccountOptions("","Choose other account");openSheet('<div class="pull"></div><b style="font-size:17px">Classify captured movement</b><p class="hint">'+esc(c.merchant)+' · '+(c.cur==="MYR"?rmf(c.amount):money(c.amount))+'</p><div class="field"><label for="cmType">Type</label><select id="cmType"><option value="transfer">Transfer between my accounts</option><option value="card_payment">Credit-card payment</option><option value="expense">Fee / non-budget expense</option></select></div>'+accountSelectHtml("cmFrom",c.account||S.defaultAccount||"","From account")+'<div class="field"><label for="cmTo">Other account</label><select id="cmTo">'+opts+'</select></div><button class="go" id="cmSave">Save movement</button><button class="flat" id="cmBack">Back</button>');
+  document.getElementById("cmBack").onclick=function(){openCapture(c.id);};document.getElementById("cmSave").onclick=function(){var t=document.getElementById("cmType").value,from=document.getElementById("cmFrom").value,to=document.getElementById("cmTo").value;if(!from){toast("Choose the account");return;}if((t==="transfer"||t==="card_payment")&&!to){toast("Choose the other account");return;}var x={id:"l"+Date.now(),type:t,amount:c.amount,cur:c.cur,date:(c.timestamp||iso(today())).slice(0,10),note:c.merchant,createdAt:Date.now(),source:"notification",captureId:c.id,account:"",from:"",to:""};if(t==="transfer"||t==="card_payment"){x.from=from;x.to=to;}else{x.account=from;}S.ledger.push(x);c.status="confirmed";save();shut();redraw();toast("Movement saved");};
+}
+function handleCaptureURL(){
+  var raw=(location.hash||"").replace(/^#/,"");if(!raw||raw.indexOf("capture=")<0)return false;
+  var p=new URLSearchParams(raw);if(p.get("capture")!=="1")return false;
+  var c=parseNotificationText(p.get("text")||p.get("body")||"",{app:p.get("app")||p.get("source")||"",merchant:p.get("merchant")||"",amount:p.get("amount")||p.get("amt")||"",cur:p.get("cur")||"",timestamp:p.get("timestamp")||""});
+  var ok=addCapture(c);if(history.replaceState)history.replaceState({},"",location.pathname+location.search);return ok;
+}
+
+/* ── historical canonical migration (3.2) ── */
+function findOrCreateAccount(name,type,currency){name=(name||"Imported account").trim();var hit=S.accounts.find(function(a){return a.name.toLowerCase()===name.toLowerCase();});if(hit)return hit.id;var mapped=type==="credit_card"?"credit":type==="cash"?"cash":"bank",a={id:"a"+Date.now()+Math.floor(Math.random()*9999),name:name,type:mapped,balance:0,baseBalance:0,snapshotAt:Date.now(),updated:iso(today()),currency:currency||"SGD",source:"historical_import"};S.accounts.push(a);return a.id;}
+function findOrCreateCategory(name){name=(name||"").trim();if(!name)return (S.cats.find(function(c){return c.name.toLowerCase()==="other";})||S.cats[0]||{}).id||"";var hit=S.cats.find(function(c){return c.name.toLowerCase()===name.toLowerCase();});if(hit)return hit.id;var c={id:"c"+Date.now()+Math.floor(Math.random()*9999),name:name,icon:"dots",cap:0,quick:[500,1000,2000,5000]};S.cats.push(c);return c.id;}
+function canonicalIndex(headers,name){return headers.findIndex(function(x){return String(x).trim().toLowerCase()===name;});}
+function previewHistorical(text,name){
+  var rows=parseCsv(text);if(rows.length<2){toast("No transaction rows found");return;}var h=rows[0].map(function(x){return String(x).trim().toLowerCase();}),required=["account_name","account_type","currency","transaction_date","description","transaction_type","amount"],missing=required.filter(function(x){return h.indexOf(x)<0;});if(missing.length){toast("This is not the canonical history format");return;}
+  var idx={};h.forEach(function(x,i){idx[x]=i;});var data=rows.slice(1).filter(function(r){return r[idx.transaction_date]&&r[idx.amount];});var accs={};data.forEach(function(r){accs[r[idx.account_name]||"Imported account"]=1;});
+  openSheet('<div class="pull"></div><b style="font-size:17px">Historical migration</b><p class="hint">'+esc(name)+' will be imported as historical records. This is intended as a one-time migration.</p><div class="migration-score"><div><span>Rows</span><b>'+data.length+'</b></div><div><span>Accounts</span><b>'+Object.keys(accs).length+'</b></div><div><span>Mode</span><b>Merge</b></div></div><div class="success-note">Existing Budget Margin entries are kept. Imported rows get a historical source marker. Re-importing the same file is blocked.</div><button class="go" id="histGo">Import history</button><button class="flat" id="histCancel">Cancel</button>');
+  document.getElementById("histCancel").onclick=shut;document.getElementById("histGo").onclick=function(){importHistoricalRows(data,idx,name);};
+}
+function importHistoricalRows(rows,idx,name){
+  var fileSig=name+"|"+rows.length+"|"+(rows[0]&&rows[0][idx.transaction_date]||"")+"|"+(rows[rows.length-1]&&rows[rows.length-1][idx.transaction_date]||"");if(S.historicalImports.some(function(x){return x.signature===fileSig;})){toast("This historical file appears to be imported already");return;}
+  var added=0,ledgerAdded=0,lastBal={};rows.forEach(function(r,n){var an=r[idx.account_name]||"Imported account",at=r[idx.account_type]||"bank",cur=(r[idx.currency]||"SGD").toUpperCase(),date=(r[idx.transaction_date]||"").trim(),desc=r[idx.description]||"",type=(r[idx.transaction_type]||"other").trim().toLowerCase(),amount=parseFloat(String(r[idx.amount]||"").replace(/,/g,""));if(!date||!isFinite(amount)||amount===0)return;var aid=findOrCreateAccount(an,at,cur),cents=Math.round(Math.abs(amount)*100),ref=idx.reference!=null?r[idx.reference]||"":"",merchant=idx.merchant!=null?r[idx.merchant]||"":"",hint=idx.category_hint!=null?r[idx.category_hint]||"":"",bal=idx.balance!=null?parseFloat(String(r[idx.balance]||"").replace(/,/g,"")):NaN;if(isFinite(bal))lastBal[aid]={balance:Math.round(Math.abs(bal)*100),date:date};var sourceId="hist:"+fileSig+":"+n;if(type==="expense"&&amount<0){var cat=findOrCreateCategory(hint||ruleCategory(merchant||desc)||"Other"),sgd=cur==="MYR"?Math.round(cents/S.rate):cents;S.txns.push({id:uid(),date:date,sgd:sgd,cur:cur,orig:cents,cat:cat,note:merchant||desc,account:aid,createdAt:Date.now(),source:"historical_import",sourceId:sourceId,reference:ref});added++;if(merchant)rememberRule(merchant,cat);}else{var lt=type;if(lt==="fee"||lt==="interest"||lt==="other")lt=amount<0?"expense":"income";if(lt==="refund")lt="refund";if(lt==="income"||lt==="expense"||lt==="refund"||lt==="transfer"||lt==="card_payment"){S.ledger.push({id:"l"+Date.now()+"_"+n,type:lt,account:(lt==="transfer"||lt==="card_payment")?"":aid,from:"",to:"",amount:cents,cur:cur,date:date,note:merchant||desc,createdAt:Date.now(),source:"historical_import",sourceId:sourceId,reference:ref});ledgerAdded++;}}});Object.keys(lastBal).forEach(function(aid){var a=accountOf(aid),b=lastBal[aid];if(a&&b){a.baseBalance=b.balance;a.balance=b.balance;a.snapshotAt=new Date(b.date+"T23:59:59").getTime();a.updated=b.date;}});S.historicalImports.push({id:"hi"+Date.now(),file:name,signature:fileSig,date:iso(today()),spending:added,ledger:ledgerAdded,rows:rows.length});save();shut();hStart=pStart(today());redraw();toast((added+ledgerAdded)+" historical records imported");}
+
 /* ── Plan screen ── */
 function drawPlan(){
-  var ps=pStart(today()), pe=pShift(ps,1), envelopeLeft=capAll()-spent(ps,pe), res=reservedCommitments(ps,pe), inc=expectedIncome(ps,pe), free=envelopeLeft-res.amount;
+  var ps=pStart(today()), pe=pShift(ps,1), envelopeLeft=capAll()-spent(ps,pe), res=reservedCommitments(ps,pe), inc=expectedIncome(ps,pe), goalReserve=goalReserveCurrent();
+  var cash=liquidTotals(), budgetFree=envelopeLeft-res.amount-goalReserve, free=S.accounts.length?Math.min(cash.net,budgetFree):budgetFree;
   var pl=document.getElementById("planPeriodLabel"); if(!pl)return;
-  pl.textContent=pLabel(ps); document.getElementById("planEnvelopeLeft").textContent=money(envelopeLeft,false); document.getElementById("planReserved").textContent=money(res.amount,false); document.getElementById("planIncome").textContent=money(inc.amount,false); document.getElementById("planFree").textContent=(free<0?"-":"")+money(Math.abs(free),false);
+  pl.textContent=pLabel(ps);
+  document.getElementById("planEnvelopeLeft").textContent=money(envelopeLeft,false);
+  document.getElementById("planReserved").textContent=money(res.amount+goalReserve,false);
+  document.getElementById("planIncome").textContent=money(inc.amount,false);
+  document.getElementById("planFree").textContent=(free<0?"-":"")+money(Math.abs(free),false);
   document.getElementById("planFree").classList.toggle("danger",free<0);
-  drawAccounts(); drawUpcoming(); drawSchedules();
+  drawForecast(); drawGoals(); drawLedger(); drawAccounts(); drawUpcoming(); drawSchedules();
 }
+
+function drawForecast(){
+  var box=document.getElementById("forecastList"), sum=document.getElementById("forecastSummary"); if(!box)return;
+  box.innerHTML="";
+  var a=today(), b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+31), items=periodOccurrences(a,b).filter(function(o){return !o.done;});
+  if(sum){
+    var net=0; items.forEach(function(o){var v=amountSgd(o.rec);net+=o.rec.type==="income"?v:-v;});
+    sum.textContent=(net>=0?"+":"-")+money(Math.abs(net),false)+" planned";
+  }
+  if(!items.length){box.appendChild(el("div","empty compact","No scheduled cash flow in the next 30 days."));return;}
+  items.slice(0,12).forEach(function(o){
+    var r=o.rec,row=el("div","forecast-row"), left=el("span","forecast-left"), dot=el("span","forecast-dot");
+    dot.classList.add(r.type==="income"?"in":"out"); left.appendChild(dot);
+    var cp=el("span"); cp.appendChild(el("b",null,r.name)); cp.appendChild(el("small",null,dateShort(o.date)+(r.account?" · "+accountName(r.account):""))); left.appendChild(cp);
+    row.appendChild(left); row.appendChild(el("b","tab "+(r.type==="income"?"income-text":""),(r.type==="income"?"+":"-")+money(amountSgd(r),false))); box.appendChild(row);
+  });
+}
+function drawGoals(){
+  var box=document.getElementById("goalList"), sum=document.getElementById("goalSummary"); if(!box)return; box.innerHTML="";
+  var saved=0,target=0,reserve=goalReserveCurrent();
+  S.goals.forEach(function(g){if(g.active!==false){saved+=g.saved||0;target+=g.target||0;}});
+  if(sum)sum.innerHTML='<div><span>Saved</span><b class="tab">'+money(saved,false)+'</b></div><div><span>Still to target</span><b class="tab">'+money(Math.max(0,target-saved),false)+'</b></div><div><span>This period</span><b class="tab">'+money(reserve,false)+'</b></div>';
+  if(!S.goals.length){box.appendChild(el("div","empty compact","Create a sinking fund for travel, insurance, emergency cash or anything you want to prepare for."));return;}
+  S.goals.forEach(function(g){
+    var pct=g.target>0?Math.min(1,(g.saved||0)/g.target):0, card=el("button","goal-card"), top=el("div","goal-top");
+    var left=el("span","goal-copy"); left.appendChild(el("b",null,g.name)); left.appendChild(el("small",null,(g.targetDate?"Target "+dateShort(g.targetDate)+" · ":"")+(g.periodContribution?money(g.periodContribution,false)+" / period":"No automatic reserve")));
+    top.appendChild(left); top.appendChild(el("b","tab",money(g.saved||0,false)+" / "+money(g.target||0,false))); card.appendChild(top);
+    var bar=el("div","goal-track"), fill=el("i");fill.style.width=(pct*100).toFixed(1)+"%";bar.appendChild(fill);card.appendChild(bar);
+    card.addEventListener("click",function(){openGoal(g.id);});box.appendChild(card);
+  });
+}
+function openGoal(id){
+  var g=null;S.goals.forEach(function(x){if(x.id===id)g=x;});
+  if(!g)g={id:"g"+Date.now(),name:"",target:0,saved:0,targetDate:"",periodContribution:0,active:true};
+  openSheet('<div class="pull"></div><b style="font-size:17px">'+(id?'Edit goal':'New goal')+'</b>'+
+    '<div class="field" style="margin-top:14px"><label for="gName">Goal</label><input id="gName" value="'+esc(g.name)+'" placeholder="Emergency fund"></div>'+
+    '<div class="two-fields"><div class="field"><label for="gTarget">Target</label><input id="gTarget" inputmode="decimal" value="'+((g.target||0)/100).toFixed(2)+'"></div><div class="field"><label for="gSaved">Already saved</label><input id="gSaved" inputmode="decimal" value="'+((g.saved||0)/100).toFixed(2)+'"></div></div>'+
+    '<div class="two-fields"><div class="field"><label for="gPer">Reserve each period</label><input id="gPer" inputmode="decimal" value="'+((g.periodContribution||0)/100).toFixed(2)+'"></div><div class="field"><label for="gDate">Target date</label><input id="gDate" type="date" value="'+(g.targetDate||"")+'"></div></div>'+
+    '<button class="go" id="gSave">Save goal</button>'+
+    (id?'<button class="sm" id="gContrib" style="width:100%;margin-top:8px">Add contribution</button><button class="flat danger" id="gDelete">Remove goal</button>':'')+
+    '<button class="flat" id="gCancel">Cancel</button>');
+  document.getElementById("gCancel").onclick=shut;
+  document.getElementById("gSave").onclick=function(){
+    var name=document.getElementById("gName").value.trim();if(!name){toast("Give the goal a name");return;}
+    g.name=name;g.target=toCents(document.getElementById("gTarget").value);g.saved=toCents(document.getElementById("gSaved").value);g.periodContribution=toCents(document.getElementById("gPer").value);g.targetDate=document.getElementById("gDate").value||"";
+    if(!id)S.goals.push(g);save();shut();redraw();toast(id?"Goal updated":"Goal added");
+  };
+  if(id){
+    document.getElementById("gContrib").onclick=function(){openGoalContribution(g.id);};
+    document.getElementById("gDelete").onclick=function(){if(!confirm("Remove "+g.name+"?"))return;S.goals=S.goals.filter(function(x){return x.id!==g.id;});save();shut();redraw();toast("Goal removed");};
+  }
+}
+function openGoalContribution(id){
+  var g=null;S.goals.forEach(function(x){if(x.id===id)g=x;});if(!g)return;
+  var opts='<option value="">No account</option>';S.accounts.forEach(function(a){opts+='<option value="'+a.id+'">'+esc(a.name)+'</option>';});
+  openSheet('<div class="pull"></div><b style="font-size:17px">Add to '+esc(g.name)+'</b>'+
+    '<div class="field" style="margin-top:14px"><label for="gcAmt">Amount</label><input id="gcAmt" inputmode="decimal" placeholder="0.00"></div>'+
+    '<div class="field"><label for="gcAcc">From account</label><select id="gcAcc">'+opts+'</select></div>'+
+    '<button class="go" id="gcSave">Save contribution</button><button class="flat" id="gcCancel">Cancel</button>');
+  document.getElementById("gcCancel").onclick=shut;
+  document.getElementById("gcSave").onclick=function(){
+    var amt=toCents(document.getElementById("gcAmt").value);if(!amt){toast("Enter an amount");return;}
+    var account=document.getElementById("gcAcc").value, now=Date.now();
+    g.saved=(g.saved||0)+amt;S.goalContrib.push({id:"gc"+now,goal:g.id,amount:amt,date:iso(today()),account:account,createdAt:now});
+    if(account)S.ledger.push({id:"l"+now,type:"goal",account:account,amount:amt,cur:"SGD",date:iso(today()),note:g.name,createdAt:now});
+    save();shut();redraw();toast(money(amt,false)+" added to "+g.name);
+  };
+}
+function drawLedger(){
+  var box=document.getElementById("ledgerList"), sum=document.getElementById("ledgerSummary");if(!box)return;box.innerHTML="";
+  var rows=S.ledger.slice().sort(function(a,b){return (b.date||"").localeCompare(a.date||"")||(b.createdAt||0)-(a.createdAt||0);}).slice(0,8);
+  var monthStart=pStart(today()), monthEnd=pShift(monthStart,1), inflow=0,outflow=0;
+  S.ledger.forEach(function(x){if(!x.date||!inR(x,monthStart,monthEnd))return;var a=ledgerAmountSgd(x);if(x.type==="income"||x.type==="refund")inflow+=a;else if(x.type==="expense"||x.type==="goal")outflow+=a;});
+  if(sum)sum.innerHTML='<div><span>Income entries</span><b class="tab">'+money(inflow,false)+'</b></div><div><span>Other outflow</span><b class="tab">'+money(outflow,false)+'</b></div>';
+  if(!rows.length){box.appendChild(el("div","empty compact","Use the ledger for income, transfers, refunds and card payments. Envelope spending still comes from Spend."));return;}
+  rows.forEach(function(x){
+    var row=el("button","ledger-row"), left=el("span","ledger-left"), cp=el("span");
+    cp.appendChild(el("b",null,ledgerLabel(x)));cp.appendChild(el("small",null,(x.note?x.note+" · ":"")+dateShort(x.date||iso(today()))));left.appendChild(cp);row.appendChild(left);
+    row.appendChild(el("b","tab "+((x.type==="income"||x.type==="refund")?"income-text":""),ledgerDisplayAmount(x)));row.addEventListener("click",function(){openLedger(x.id);});box.appendChild(row);
+  });
+}
+function ledgerLabel(x){
+  if(x.type==="transfer")return "Transfer · "+accountName(x.from)+" → "+accountName(x.to);
+  if(x.type==="card_payment")return "Card payment · "+accountName(x.to);
+  if(x.type==="goal")return "Goal contribution";
+  return x.type.charAt(0).toUpperCase()+x.type.slice(1)+(x.account?" · "+accountName(x.account):"");
+}
+function ledgerDisplayAmount(x){
+  var a=ledgerAmountSgd(x), sign=(x.type==="income"||x.type==="refund")?"+":(x.type==="transfer"||x.type==="card_payment"?"":"-");
+  return sign+money(a,false);
+}
+function ledgerAccountOptions(selected,none){
+  var h='<option value="">'+(none||"Select account")+'</option>';S.accounts.forEach(function(a){h+='<option value="'+a.id+'"'+(a.id===selected?' selected':'')+'>'+esc(a.name)+'</option>';});return h;
+}
+function openLedger(id){
+  var x=null;S.ledger.forEach(function(z){if(z.id===id)x=z;});
+  if(!x)x={id:"l"+Date.now(),type:"income",amount:0,cur:"SGD",date:iso(today()),note:"",account:"",from:"",to:"",createdAt:Date.now()};
+  openSheet('<div class="pull"></div><b style="font-size:17px">'+(id?'Edit ledger entry':'New ledger entry')+'</b>'+
+    '<div class="field" style="margin-top:14px"><label for="lType">Type</label><select id="lType"><option value="income"'+(x.type==="income"?' selected':'')+'>Income</option><option value="expense"'+(x.type==="expense"?' selected':'')+'>Expense outside envelopes</option><option value="refund"'+(x.type==="refund"?' selected':'')+'>Refund</option><option value="transfer"'+(x.type==="transfer"?' selected':'')+'>Transfer</option><option value="card_payment"'+(x.type==="card_payment"?' selected':'')+'>Credit-card payment</option></select></div>'+
+    '<div class="two-fields"><div class="field"><label for="lAmt">Amount</label><input id="lAmt" inputmode="decimal" value="'+((x.amount||0)/100).toFixed(2)+'"></div><div class="field"><label for="lDate">Date</label><input id="lDate" type="date" value="'+(x.date||iso(today()))+'"></div></div>'+
+    '<div class="field" id="lAccountField"><label for="lAccount">Account</label><select id="lAccount">'+ledgerAccountOptions(x.account||"")+'</select></div>'+
+    '<div class="two-fields" id="lTransferFields"><div class="field"><label for="lFrom">From</label><select id="lFrom">'+ledgerAccountOptions(x.from||"")+'</select></div><div class="field"><label for="lTo">To</label><select id="lTo">'+ledgerAccountOptions(x.to||"")+'</select></div></div>'+
+    '<div class="field"><label for="lNote">Note</label><input id="lNote" value="'+esc(x.note||"")+'" placeholder="Salary, transfer, refund…"></div>'+
+    '<button class="go" id="lSave">Save entry</button>'+(id?'<button class="flat danger" id="lDelete">Delete entry</button>':'')+'<button class="flat" id="lCancel">Cancel</button>');
+  function sync(){var t=document.getElementById("lType").value, multi=t==="transfer"||t==="card_payment";document.getElementById("lAccountField").hidden=multi;document.getElementById("lTransferFields").hidden=!multi;}
+  document.getElementById("lType").onchange=sync;sync();document.getElementById("lCancel").onclick=shut;
+  document.getElementById("lSave").onclick=function(){
+    var amt=toCents(document.getElementById("lAmt").value);if(!amt){toast("Enter an amount");return;}
+    x.type=document.getElementById("lType").value;x.amount=amt;x.cur="SGD";x.date=document.getElementById("lDate").value||iso(today());x.note=document.getElementById("lNote").value.trim();
+    x.account=document.getElementById("lAccount").value;x.from=document.getElementById("lFrom").value;x.to=document.getElementById("lTo").value;if(!x.createdAt)x.createdAt=Date.now();
+    if((x.type==="transfer"||x.type==="card_payment")&&(!x.from||!x.to)){toast("Choose both accounts");return;}
+    if(!(x.type==="transfer"||x.type==="card_payment")&&!x.account){toast("Choose an account");return;}
+    if(!id)S.ledger.push(x);save();shut();redraw();toast("Ledger entry saved");
+  };
+  if(id)document.getElementById("lDelete").onclick=function(){if(!confirm("Delete this ledger entry?"))return;S.ledger=S.ledger.filter(function(z){return z.id!==id;});save();shut();redraw();toast("Ledger entry deleted");};
+}
+
 function drawAccounts(){
   var box=document.getElementById("accountList"), sum=document.getElementById("accountSummary"); if(!box)return; box.innerHTML=""; sum.innerHTML="";
-  var liquid=0, credit=0; S.accounts.forEach(function(a){if(a.type==="credit")credit+=a.balance||0;else liquid+=a.balance||0;});
-  sum.innerHTML='<div><span>Liquid snapshot</span><b class="tab">'+money(liquid,false)+'</b></div><div><span>Cards owing</span><b class="tab">'+money(credit,false)+'</b></div>';
-  if(!S.accounts.length){box.appendChild(el("div","empty compact","Add the accounts you actually use, then tag spending to them."));return;}
-  S.accounts.forEach(function(a){ var b=el("button","account-card"), left=el("span","account-left"), ico=el("span","account-icon"); ico.innerHTML=iconSvg(accountIcon(a.type)); left.appendChild(ico); var cp=el("span"); cp.appendChild(el("b",null,a.name)); cp.appendChild(el("small",null,accountTypeLabel(a.type)+(a.updated?" · updated "+dateShort(a.updated):""))); left.appendChild(cp); b.appendChild(left); var right=el("span","account-balance"); right.appendChild(el("b","tab",money(a.balance||0,false))); right.appendChild(el("small",null,a.type==="credit"?"owing":"snapshot")); b.appendChild(right); b.addEventListener("click",function(){openAccount(a.id);}); box.appendChild(b); });
+  var totals=liquidTotals();
+  sum.innerHTML='<div><span>Liquid</span><b class="tab">'+money(totals.liquid,false)+'</b></div><div><span>Cards owing</span><b class="tab">'+money(totals.credit,false)+'</b></div>';
+  if(!S.accounts.length){box.appendChild(el("div","empty compact","Add the accounts you actually use. From 3.0, new ledger activity can move these balances."));return;}
+  S.accounts.forEach(function(a){
+    var current=accountCurrent(a), b=el("button","account-card"), left=el("span","account-left"), ico=el("span","account-icon");
+    ico.innerHTML=iconSvg(accountIcon(a.type)); left.appendChild(ico);
+    var cp=el("span"); cp.appendChild(el("b",null,a.name)); cp.appendChild(el("small",null,accountTypeLabel(a.type)+" · live from snapshot")); left.appendChild(cp); b.appendChild(left);
+    var right=el("span","account-balance"); right.appendChild(el("b","tab",money(current,false))); right.appendChild(el("small",null,a.type==="credit"?"owing":"available")); b.appendChild(right);
+    b.addEventListener("click",function(){openAccount(a.id);}); box.appendChild(b);
+  });
 }
 function openAccount(id){
-  var a=id?accountOf(id):null; if(!a)a={id:"a"+Date.now(),name:"",type:"bank",balance:0,updated:iso(today())};
-  openSheet('<div class="pull"></div><b style="font-size:17px">'+(id?'Edit account':'Add account')+'</b>'+ '<div class="field" style="margin-top:14px"><label for="aName">Name</label><input id="aName" autocomplete="off" value="'+esc(a.name)+'" placeholder="DBS Everyday"></div>'+ '<div class="field"><label for="aType">Type</label><select id="aType"><option value="bank"'+(a.type==='bank'?' selected':'')+'>Bank account</option><option value="cash"'+(a.type==='cash'?' selected':'')+'>Cash</option><option value="credit"'+(a.type==='credit'?' selected':'')+'>Credit card</option></select></div>'+ '<div class="field"><label for="aBal">'+(a.type==='credit'?'Amount owing':'Current balance')+'</label><input id="aBal" type="text" inputmode="decimal" value="'+((a.balance||0)/100).toFixed(2)+'"></div>'+ '<p class="hint">This is a manual snapshot. Budget Margin will not alter it behind your back when you log spending.</p>'+ '<button class="go" id="aSave">Save account</button>'+ (id?'<button class="flat danger" id="aDelete">Remove account</button>':'')+'<button class="flat" id="aCancel">Cancel</button>');
+  var a=id?accountOf(id):null; if(!a)a={id:"a"+Date.now(),name:"",type:"bank",balance:0,baseBalance:0,snapshotAt:Date.now(),updated:iso(today())};
+  var shown=id?accountCurrent(a):(a.baseBalance||0);
+  openSheet('<div class="pull"></div><b style="font-size:17px">'+(id?'Edit account':'Add account')+'</b>'+
+    '<div class="field" style="margin-top:14px"><label for="aName">Name</label><input id="aName" autocomplete="off" value="'+esc(a.name)+'" placeholder="DBS Everyday"></div>'+
+    '<div class="field"><label for="aType">Type</label><select id="aType"><option value="bank"'+(a.type==='bank'?' selected':'')+'>Bank account</option><option value="cash"'+(a.type==='cash'?' selected':'')+'>Cash</option><option value="credit"'+(a.type==='credit'?' selected':'')+'>Credit card</option></select></div>'+
+    '<div class="field"><label for="aBal">'+(a.type==='credit'?'Current amount owing':'Current balance')+'</label><input id="aBal" type="text" inputmode="decimal" value="'+(shown/100).toFixed(2)+'"></div>'+
+    '<p class="hint">Saving a balance creates a fresh snapshot. New spending, income, transfers and card payments after that snapshot move the live balance automatically.</p>'+
+    '<button class="go" id="aSave">Save account</button>'+
+    (id?'<button class="flat danger" id="aDelete">Remove account</button>':'')+'<button class="flat" id="aCancel">Cancel</button>');
   document.getElementById("aCancel").onclick=shut;
-  document.getElementById("aSave").onclick=function(){var name=document.getElementById("aName").value.trim();if(!name){toast("Give the account a name");return;}a.name=name;a.type=document.getElementById("aType").value;a.balance=toCents(document.getElementById("aBal").value);a.updated=iso(today());if(!id){S.accounts.push(a);if(!S.defaultAccount)S.defaultAccount=a.id;}save();shut();redraw();toast(id?"Account updated":"Account added");};
-  if(id)document.getElementById("aDelete").onclick=function(){if(!confirm("Remove "+a.name+"? Existing transactions will become unassigned."))return;S.accounts=S.accounts.filter(function(x){return x.id!==id;});S.txns.forEach(function(t){if(t.account===id)t.account="";});S.recurring.forEach(function(r){if(r.account===id)r.account="";});if(S.defaultAccount===id)S.defaultAccount="";save();shut();redraw();toast("Account removed");};
+  document.getElementById("aSave").onclick=function(){
+    var name=document.getElementById("aName").value.trim(); if(!name){toast("Give the account a name");return;}
+    a.name=name; a.type=document.getElementById("aType").value; a.balance=toCents(document.getElementById("aBal").value); a.baseBalance=a.balance; a.snapshotAt=Date.now(); a.updated=iso(today());
+    if(!id){S.accounts.push(a);if(!S.defaultAccount)S.defaultAccount=a.id;}
+    save();shut();redraw();toast(id?"Account snapshot updated":"Account added");
+  };
+  if(id)document.getElementById("aDelete").onclick=function(){
+    if(!confirm("Remove "+a.name+"? Existing transactions will become unassigned."))return;
+    S.accounts=S.accounts.filter(function(x){return x.id!==id;});
+    S.txns.forEach(function(t){if(t.account===id)t.account="";});
+    S.recurring.forEach(function(r){if(r.account===id)r.account="";});
+    S.ledger.forEach(function(x){if(x.account===id)x.account="";if(x.from===id)x.from="";if(x.to===id)x.to="";});
+    if(S.defaultAccount===id)S.defaultAccount="";save();shut();redraw();toast("Account removed");
+  };
 }
 function drawUpcoming(){
   var box=document.getElementById("upcomingList"); if(!box)return; box.innerHTML="";
@@ -525,7 +821,18 @@ function drawUpcoming(){
   if(!list.length){box.appendChild(el("div","empty compact","Nothing scheduled for the next 30 days."));return;}
   list.forEach(function(o){var r=o.rec, row=el("div","upcoming-card"), left=el("span","upcoming-left"), ico=el("span","upcoming-icon "+(r.type==='income'?'income':'expense'));ico.innerHTML=iconSvg(r.type==='income'?'spark':'calendar');left.appendChild(ico);var cp=el("span");cp.appendChild(el("b",null,r.name));var d=pIso(o.date), overdue=d<today();cp.appendChild(el("small",null,(overdue?'Overdue · ':'')+dateShort(o.date)+(r.account?' · '+accountName(r.account):'')));left.appendChild(cp);row.appendChild(left);var side=el("span","upcoming-side");side.appendChild(el("b","tab "+(r.type==='income'?'income-text':''),(r.type==='income'?'+':'-')+money(amountSgd(r),false)));var act=el("button","mini-action",r.type==='income'?"Received":(r.cat?"Log":"Paid"));act.addEventListener("click",function(){completeOccurrence(o);});side.appendChild(act);row.appendChild(side);box.appendChild(row);});
 }
-function completeOccurrence(o){var r=o.rec,key=occurrenceKey(r,o.date);if(r.type!=="income"&&r.cat){logSpend(r.cat,r.amount,r.cur||"SGD",r.name,r.account||"");}S.recurringDone[key]=true;save();redraw();toast(r.type==='income'?"Income marked received":(r.cat?"Commitment logged":"Marked paid"));}
+function completeOccurrence(o){
+  var r=o.rec,key=occurrenceKey(r,o.date),now=Date.now(),amt=r.amount||0,cur=r.cur||"SGD";
+  if(r.type==="income"&&r.account){
+    S.ledger.push({id:"l"+now,type:"income",account:r.account,amount:amt,cur:cur,date:o.date,note:r.name,createdAt:now});
+  } else if(r.type!=="income"&&r.cat){
+    var s=cur==="MYR"?Math.round(amt/S.rate):amt,id=uid();
+    S.txns.push({id:id,date:o.date,sgd:s,cur:cur,orig:amt,cat:r.cat,note:r.name,account:r.account||"",createdAt:now});
+  } else if(r.type!=="income"&&r.account){
+    S.ledger.push({id:"l"+now,type:"expense",account:r.account,amount:amt,cur:cur,date:o.date,note:r.name,createdAt:now});
+  }
+  S.recurringDone[key]=true;save();redraw();toast(r.type==="income"?"Income received":(r.cat?"Commitment logged":"Marked paid"));
+}
 function drawSchedules(){
   var box=document.getElementById("scheduleList"), count=document.getElementById("recurringCount"); if(!box)return; box.innerHTML="";var active=S.recurring.filter(function(r){return r.active!==false;});if(count)count.textContent=active.length+" active";if(!S.recurring.length){box.appendChild(el("div","empty compact","Schedule rent, subscriptions, insurance, salary or any predictable cash flow."));return;}S.recurring.forEach(function(r){var b=el("button","schedule-card"), left=el("span","schedule-left"), ico=el("span","schedule-icon");ico.innerHTML=iconSvg(r.type==='income'?'spark':'calendar');left.appendChild(ico);var cp=el("span");cp.appendChild(el("b",null,r.name));var nx=nextOccurrence(r);cp.appendChild(el("small",null,(r.freq||'monthly')+(nx?' · next '+dateShort(nx.date):'')+(r.reserve!==false&&r.type!=='income'?' · reserved':'')));left.appendChild(cp);b.appendChild(left);b.appendChild(el("span","tab",(r.type==='income'?'+':'')+(r.cur==='MYR'?rmf(r.amount):money(r.amount,false))));b.addEventListener("click",function(){openRecurring(r.id);});box.appendChild(b);});
 }
@@ -656,11 +963,124 @@ function drawRecHist(){
   if(!S.recs.length){ box.textContent="No checks done yet."; return; }
   S.recs.slice(-6).reverse().forEach(function(r){
     var gap=r.actual-r.logged;
-    var d=el("div",null,pLabel(pIso(r.p))+" — missed "+money(Math.max(0,gap),false));
+    var title=r.label||pLabel(pIso(r.p));
+    var extra=r.source==="csv"?" · "+(r.matched||0)+" matched, "+(r.missing||0)+" missing":"";
+    var d=el("div",null,title+" — difference "+(gap<0?"-":"")+money(Math.abs(gap),false)+extra);
     d.style.marginBottom="4px";
-    if(gap>r.logged*0.15) d.style.color="var(--coral)";
+    if(Math.abs(gap)>Math.max(500,r.logged*0.15)) d.style.color="var(--coral)";
     box.appendChild(d);
   });
+}
+
+
+function merchantKey(s){return String(s||"").toUpperCase().replace(/\b(PTE|LTD|LIMITED|SINGAPORE|SG|PAYMENT|PURCHASE|DEBIT|CARD)\b/g," ").replace(/[^A-Z0-9]+/g," ").trim().split(" ").slice(0,5).join(" ");}
+function ruleCategory(desc){var k=merchantKey(desc),best="",cat="";Object.keys(S.merchantRules||{}).forEach(function(r){if(k.indexOf(r)>=0&&r.length>best.length){best=r;cat=S.merchantRules[r];}});return cat;}
+function rememberRule(desc,cat){var k=merchantKey(desc);if(k&&cat){if(!S.merchantRules)S.merchantRules={};S.merchantRules[k]=cat;}}
+var statementStage=null;
+function parseCsv(text){
+  var rows=[],row=[],cell="",q=false;
+  for(var i=0;i<text.length;i++){
+    var c=text[i],n=text[i+1];
+    if(q){
+      if(c==='"'&&n==='"'){cell+='"';i++;}
+      else if(c==='"')q=false; else cell+=c;
+    }else{
+      if(c==='"')q=true;
+      else if(c===','){row.push(cell);cell="";}
+      else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell="";}
+      else if(c!=='\r')cell+=c;
+    }
+  }
+  if(cell.length||row.length){row.push(cell);rows.push(row);}
+  return rows.filter(function(r){return r.some(function(x){return String(x).trim()!=="";});});
+}
+function colGuess(headers,words){
+  var low=headers.map(function(h){return String(h).trim().toLowerCase();});
+  for(var i=0;i<words.length;i++){var k=low.findIndex(function(h){return h.indexOf(words[i])>=0;});if(k>=0)return k;}
+  return -1;
+}
+function mapSelect(id,headers,selected,none){
+  var h='<select id="'+id+'"><option value="-1">'+(none||"Not used")+'</option>';
+  headers.forEach(function(x,i){h+='<option value="'+i+'"'+(i===selected?' selected':'')+'>'+esc(x||("Column "+(i+1)))+'</option>';});
+  return h+'</select>';
+}
+function parseStatementDate(raw,fmt){
+  raw=String(raw||"").trim();if(!raw)return null;
+  var y,m,d,mt=raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(mt){y=+mt[1];m=+mt[2];d=+mt[3];return new Date(y,m-1,d);}
+  var mons={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  mt=raw.match(/^(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s](\d{2,4})/);
+  if(mt){d=+mt[1];m=mons[mt[2].slice(0,3).toLowerCase()];y=+mt[3];if(y<100)y+=2000;if(m!=null)return new Date(y,m,d);}
+  mt=raw.match(/^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2,4})/);
+  if(mt){m=mons[mt[1].slice(0,3).toLowerCase()];d=+mt[2];y=+mt[3];if(y<100)y+=2000;if(m!=null)return new Date(y,m,d);}
+  mt=raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/);if(!mt)return null;
+  var a=+mt[1],b=+mt[2],c=+mt[3];if(c<100)c+=2000;
+  if(fmt==="mdy"){m=a;d=b;}else if(fmt==="dmy"){d=a;m=b;}else{if(a>12){d=a;m=b;}else if(b>12){m=a;d=b;}else{d=a;m=b;}}
+  return new Date(c,m-1,d);
+}
+function numCell(v){var n=parseFloat(String(v||"").replace(/[^0-9.\-]/g,""));return isNaN(n)?0:n;}
+function statementHeaderIndex(rows){
+  var best=-1,bestScore=-1;for(var i=0;i<Math.min(rows.length,25);i++){var low=rows[i].map(function(x){return String(x).trim().toLowerCase();}),score=0;if(low.some(function(x){return x.indexOf("date")>=0;}))score+=2;if(low.some(function(x){return x.indexOf("description")>=0||x.indexOf("details")>=0||x.indexOf("narrative")>=0;}))score+=2;if(low.some(function(x){return x.indexOf("debit")>=0||x.indexOf("money out")>=0||x==="amount";}))score+=2;if(low.some(function(x){return x.indexOf("credit")>=0||x.indexOf("money in")>=0;}))score+=1;if(score>bestScore){bestScore=score;best=i;}}return bestScore>=4?best:0;
+}
+function statementMeta(rows,hi){var meta={account:"",currency:""};for(var i=0;i<hi;i++){var a=String((rows[i]||[])[0]||"").trim().toLowerCase(),b=String((rows[i]||[])[1]||"").trim();if(a.indexOf("account details")>=0)meta.account=b;if(a.indexOf("currency")>=0){var m=b.match(/\b(SGD|MYR|USD|EUR|GBP|AUD|JPY)\b/i);if(m)meta.currency=m[1].toUpperCase();}}return meta;}
+function openStatementMapping(name,rows){
+  if(rows.length<2){toast("That file has no transaction rows");return;}
+  var hi=statementHeaderIndex(rows),meta=statementMeta(rows,hi);rows=rows.slice(hi);var headers=rows[0], dateI=colGuess(headers,["transaction date","posting date","date"]), descI=colGuess(headers,["description","details","narrative","merchant","reference"]), amountI=colGuess(headers,["amount"]), debitI=colGuess(headers,["debit","withdrawal","money out"]), creditI=colGuess(headers,["credit","deposit","money in"]);
+  var suggested=S.defaultAccount||"";if(meta.account){var mk=meta.account.toUpperCase();S.accounts.some(function(a){if(mk.indexOf(a.name.toUpperCase())>=0||a.name.toUpperCase().indexOf(mk.split(/\s+/)[0])>=0){suggested=a.id;return true;}return false;});}var acc=ledgerAccountOptions(suggested,"Choose statement account");
+  openSheet('<div class="pull"></div><b style="font-size:17px">Import statement</b>'+
+    '<p class="hint">'+esc(name)+' · '+(rows.length-1)+' data rows'+(hi?(' · header detected on row '+(hi+1)):'')+(meta.currency?(' · '+meta.currency):'')+'. Map the columns once before Budget Margin compares them.</p>'+
+    '<div class="field"><label for="siAcc">Account</label><select id="siAcc">'+acc+'</select></div>'+
+    '<div class="two-fields"><div class="field"><label>Date</label>'+mapSelect("siDate",headers,dateI,"Choose date")+'</div><div class="field"><label>Description</label>'+mapSelect("siDesc",headers,descI,"Optional")+'</div></div>'+
+    '<div class="field"><label>Date format</label><select id="siFmt"><option value="auto">Auto / DD-MM-YYYY first</option><option value="dmy">DD-MM-YYYY</option><option value="mdy">MM-DD-YYYY</option></select></div>'+
+    '<div class="field"><label>Single signed amount column</label>'+mapSelect("siAmount",headers,amountI,"Not used")+'</div>'+
+    '<div class="field"><label>If using signed amount</label><select id="siSign"><option value="negative">Negative = money out</option><option value="positive">Positive = money out</option></select></div>'+
+    '<div class="two-fields"><div class="field"><label>Debit / money out</label>'+mapSelect("siDebit",headers,debitI,"Not used")+'</div><div class="field"><label>Credit / money in</label>'+mapSelect("siCredit",headers,creditI,"Not used")+'</div></div>'+
+    '<button class="go" id="siAnalyze">Analyse statement</button><button class="flat" id="siCancel">Cancel</button>');
+  document.getElementById("siCancel").onclick=shut;
+  document.getElementById("siAnalyze").onclick=function(){
+    var aid=document.getElementById("siAcc").value,di=+document.getElementById("siDate").value,de=+document.getElementById("siDesc").value,ai=+document.getElementById("siAmount").value,db=+document.getElementById("siDebit").value,cr=+document.getElementById("siCredit").value,fmt=document.getElementById("siFmt").value,sign=document.getElementById("siSign").value;
+    if(!aid){toast("Choose the account this statement belongs to");return;}if(di<0){toast("Choose the date column");return;}if(ai<0&&db<0){toast("Choose an amount column or a debit column");return;}
+    var parsed=[];
+    rows.slice(1).forEach(function(r){
+      var dt=parseStatementDate(r[di],fmt);if(!dt||isNaN(dt.getTime()))return;
+      var out=0,inc=0;
+      if(db>=0||cr>=0){out=Math.abs(numCell(r[db]));inc=Math.abs(numCell(r[cr]));}
+      else {var n=numCell(r[ai]);if(sign==="negative"){out=n<0?Math.abs(n):0;inc=n>0?n:0;}else{out=n>0?n:0;inc=n<0?Math.abs(n):0;}}
+      if(!out&&!inc)return;
+      parsed.push({date:iso(dt),desc:de>=0?String(r[de]||"").trim():"",out:Math.round(out*100),inc:Math.round(inc*100)});
+    });
+    analyzeStatement(name,aid,parsed);
+  };
+}
+function bookCandidates(aid){
+  var out=[];S.txns.forEach(function(t){if(!t.account||t.account===aid)out.push({id:"t:"+t.id,date:t.date,flow:"out",amt:t.sgd||0,label:catName(t.cat)});});
+  S.ledger.forEach(function(x){var a=ledgerAmountSgd(x),d=x.date||iso(today());if((x.type==="income"||x.type==="refund")&&x.account===aid)out.push({id:"l:"+x.id,date:d,flow:"in",amt:a,label:x.note||x.type});else if((x.type==="expense"||x.type==="goal")&&x.account===aid)out.push({id:"l:"+x.id,date:d,flow:"out",amt:a,label:x.note||x.type});else if(x.type==="transfer"){if(x.from===aid)out.push({id:"l:"+x.id+":o",date:d,flow:"out",amt:a,label:"Transfer"});if(x.to===aid)out.push({id:"l:"+x.id+":i",date:d,flow:"in",amt:a,label:"Transfer"});}else if(x.type==="card_payment"){if(x.from===aid)out.push({id:"l:"+x.id+":o",date:d,flow:"out",amt:a,label:"Card payment"});if(x.to===aid)out.push({id:"l:"+x.id+":i",date:d,flow:"in",amt:a,label:"Card payment"});}});return out;
+}
+function analyzeStatement(name,aid,rows,source){
+  if(!rows.length){toast("No usable transactions found");return;}
+  var used={},matched=[],unmatched=[],inflow=0,outflow=0,cands=bookCandidates(aid);
+  rows.forEach(function(r){inflow+=r.inc||0;outflow+=r.out||0;var flow=r.out?"out":"in",amt=r.out||r.inc;if(!amt)return;var best=null,bestDiff=99;cands.forEach(function(c){if(used[c.id]||c.flow!==flow||c.amt!==amt)return;var diff=Math.abs(days(pIso(c.date),pIso(r.date)));if(diff<=3&&diff<bestDiff){best=c;bestDiff=diff;}});if(best){used[best.id]=true;matched.push({row:r,book:best});}else unmatched.push({date:r.date,desc:r.desc||"",out:r.out||0,inc:r.inc||0,status:"pending",suggested:flow==="out"?ruleCategory(r.desc):""});});
+  var dates=rows.map(function(r){return r.date;}).sort(),first=dates[0],last=dates[dates.length-1],logged=0;S.txns.forEach(function(t){if(t.date>=first&&t.date<=last&&(!t.account||t.account===aid))logged+=t.sgd||0;});S.ledger.forEach(function(x){if(!x.date||x.date<first||x.date>last)return;if(x.type==="expense"&&x.account===aid)logged+=ledgerAmountSgd(x);});
+  statementStage={name:name,source:source||"csv",account:aid,rows:rows,matched:matched,unmatched:unmatched,inflow:inflow,outflow:outflow,logged:logged,first:first,last:last,reviewed:0,ignored:0,added:0};openStatementResult();
+}
+function pendingUnmatched(){return statementStage?statementStage.unmatched.filter(function(r){return r.status==="pending";}):[];}
+function openStatementResult(){
+  var st=statementStage;if(!st)return;var gap=st.outflow-st.logged,pending=pendingUnmatched();
+  openSheet('<div class="pull"></div><b style="font-size:17px">Statement comparison</b><div class="statement-score"><div><span>Matched</span><b>'+st.matched.length+'</b></div><div><span>Review</span><b>'+pending.length+'</b></div><div><span>Difference</span><b class="'+(gap?'danger':'')+'">'+(gap<0?'-':'')+money(Math.abs(gap),false)+'</b></div></div><div class="block" style="margin-top:12px"><div class="flex"><span class="dim">Statement outflow</span><b>'+money(st.outflow,false)+'</b></div><div class="flex" style="margin-top:8px"><span class="dim">Budget Margin book</span><b>'+money(st.logged,false)+'</b></div><div class="flex" style="margin-top:8px"><span class="dim">Statement inflow</span><b>'+money(st.inflow,false)+'</b></div></div>'+(pending.length?'<div class="review-callout"><b>'+pending.length+' transactions need review</b><span>Nothing is added until you approve it.</span></div><button class="go" id="siReview">Review unmatched</button>':'<div class="success-note">No unmatched transactions are waiting for review.</div>')+'<button class="sm" id="siSave" style="width:100%;margin-top:9px">Save reconciliation</button><button class="flat" id="siBack">Choose another file</button>');
+  if(pending.length)document.getElementById("siReview").onclick=function(){openReviewTxn();};
+  document.getElementById("siBack").onclick=function(){shut();document.getElementById("statementFile").click();};
+  document.getElementById("siSave").onclick=function(){var label=dateShort(st.first)+" – "+dateShort(st.last),left=pendingUnmatched().length,rec={p:st.first,label:label,logged:st.logged,actual:st.outflow,source:st.source,account:st.account,matched:st.matched.length,missing:left,file:st.name};S.recs.push(rec);S.imports.push({id:"i"+Date.now(),date:iso(today()),label:label,account:st.account,matched:st.matched.length,missing:left,difference:st.outflow-st.logged,file:st.name,source:st.source,added:st.added||0,ignored:st.ignored||0});save();statementStage=null;shut();redraw();toast("Reconciliation saved");};
+}
+function openReviewTxn(){
+  var st=statementStage,p=pendingUnmatched();if(!st||!p.length){openStatementResult();return;}var r=p[0],out=!!r.out,amt=r.out||r.inc,cat=r.suggested||S.cats[0]&&S.cats[0].id||"",opts=S.cats.map(function(c){return '<option value="'+c.id+'"'+(c.id===cat?' selected':'')+'>'+esc(c.name)+'</option>';}).join("");
+  openSheet('<div class="pull"></div><div class="review-progress">'+(st.unmatched.length-p.length+1)+' of '+st.unmatched.length+'</div><b style="font-size:18px">'+esc(r.desc||"Unlabelled transaction")+'</b><div class="review-amount '+(out?'danger':'income-text')+'">'+(out?'-':'+')+money(amt,false)+'</div><div class="tiny dim">'+dateShort(r.date)+' · '+esc(accountName(st.account))+'</div>'+(out?'<div class="field" style="margin-top:14px"><label for="rvCat">Envelope</label><select id="rvCat">'+opts+'</select></div><label class="toggle-row compact"><input id="rvRemember" type="checkbox" checked><span><b>Remember this merchant</b><small>Suggest this envelope next time.</small></span></label><button class="go" id="rvAdd">Add as spending</button>':'<button class="go" id="rvIncome" style="margin-top:15px">Add as income</button>')+'<button class="sm" id="rvTransfer" style="width:100%;margin-top:8px">Transfer / card payment</button><button class="flat" id="rvIgnore">Ignore this transaction</button><button class="flat" id="rvBack">Back to summary</button>');
+  function next(){save();if(pendingUnmatched().length)openReviewTxn();else openStatementResult();}
+  if(out)document.getElementById("rvAdd").onclick=function(){var c=document.getElementById("rvCat").value;S.txns.push({id:uid(),date:r.date,sgd:r.out,cur:"SGD",orig:r.out,cat:c,note:r.desc,account:st.account});if(document.getElementById("rvRemember").checked)rememberRule(r.desc,c);r.status="added";st.added++;st.logged+=r.out;next();};
+  else document.getElementById("rvIncome").onclick=function(){S.ledger.push({id:"l"+Date.now(),type:"income",account:st.account,amount:r.inc,cur:"SGD",date:r.date,note:r.desc,createdAt:Date.now()});r.status="added";st.added++;next();};
+  document.getElementById("rvTransfer").onclick=function(){openReviewTransfer(r);};document.getElementById("rvIgnore").onclick=function(){r.status="ignored";st.ignored++;next();};document.getElementById("rvBack").onclick=openStatementResult;
+}
+function openReviewTransfer(r){
+  var st=statementStage,aid=st.account,opts=ledgerAccountOptions("","Choose other account");openSheet('<div class="pull"></div><b style="font-size:17px">Classify movement</b><p class="hint">'+esc(r.desc||"")+' · '+money(r.out||r.inc,false)+'</p><div class="field"><label for="rvtType">Type</label><select id="rvtType"><option value="transfer">Transfer between my accounts</option><option value="card_payment">Credit-card payment</option><option value="expense">Bank fee / non-budget expense</option><option value="refund">Refund</option></select></div><div class="field"><label for="rvtOther">Other account</label><select id="rvtOther">'+opts+'</select></div><button class="go" id="rvtSave">Save classification</button><button class="flat" id="rvtCancel">Back</button>');document.getElementById("rvtCancel").onclick=openReviewTxn;document.getElementById("rvtSave").onclick=function(){var t=document.getElementById("rvtType").value,o=document.getElementById("rvtOther").value,amount=r.out||r.inc,x={id:"l"+Date.now(),type:t,amount:amount,cur:"SGD",date:r.date,note:r.desc,createdAt:Date.now(),account:"",from:"",to:""};if(t==="transfer"||t==="card_payment"){if(!o){toast("Choose the other account");return;}if(r.out){x.from=aid;x.to=o;}else{x.from=o;x.to=aid;}}else{x.account=aid;}S.ledger.push(x);r.status="added";st.added++;if(r.out&&t==="expense")st.logged+=r.out;save();if(pendingUnmatched().length)openReviewTxn();else openStatementResult();};
 }
 
 /* ── history ── */
@@ -732,6 +1152,37 @@ function drawCalendarDay(ds,detail){
   if(!list.length){detail.appendChild(el("div","empty compact","No spending logged on this day."));return;}
   list.forEach(function(t){var row=el("button","calendar-txn"),c=catOf(t.cat),l=el("span","calendar-txn-left");if(c)l.appendChild(iconBadge(c));var cp=el("span");cp.appendChild(el("b",null,catName(t.cat)));if(t.note||t.account)cp.appendChild(el("small",null,[t.note||"",t.account?accountName(t.account):""].filter(Boolean).join(" · ")));l.appendChild(cp);row.appendChild(l);row.appendChild(el("b","tab",money(t.sgd)));row.addEventListener("click",function(){openEdit(t.id);});detail.appendChild(row);});
 }
+function statsPeriodSeries(count){
+  var out=[], end=pShift(pStart(today()),1);
+  for(var i=count-1;i>=0;i--){
+    var a=pShift(end,-i-1),b=pShift(a,1),expense=0,income=0;
+    S.txns.forEach(function(t){if(inR(t,a,b))expense+=t.sgd||0;});
+    S.ledger.forEach(function(x){if(!x.date||!inR(x,a,b))return;var v=ledgerAmountSgd(x);if(x.type==="income"||x.type==="refund")income+=v;else if(x.type==="expense")expense+=v;});
+    out.push({a:a,b:b,label:MO[a.getMonth()]+" "+String(a.getFullYear()).slice(-2),expense:expense,saved:income>0?income-expense:null,income:income});
+  }
+  return out;
+}
+function svgEl(n,attrs){var x=document.createElementNS("http://www.w3.org/2000/svg",n);Object.keys(attrs||{}).forEach(function(k){x.setAttribute(k,attrs[k]);});return x;}
+function piePoint(cx,cy,r,ang){var q=(ang-90)*Math.PI/180;return [cx+r*Math.cos(q),cy+r*Math.sin(q)];}
+function piePath(cx,cy,r,a0,a1){var p0=piePoint(cx,cy,r,a0),p1=piePoint(cx,cy,r,a1),large=(a1-a0)>180?1:0;return "M "+cx+" "+cy+" L "+p0[0]+" "+p0[1]+" A "+r+" "+r+" 0 "+large+" 1 "+p1[0]+" "+p1[1]+" Z";}
+function drawSpendPie(container,items,total){
+  var wrap=el("div","pie-wrap"),svg=svgEl("svg",{viewBox:"0 0 140 140",role:"img","aria-label":"Spending by category"}),info=el("div","pie-focus");
+  var ang=0;items.forEach(function(it,idx){var pct=it.amt/total*360,path=svgEl("path",{d:piePath(70,70,62,ang,ang+pct),fill:hueOf(it.cid),tabindex:"0"});path.classList.add("pie-slice");var show=function(){Array.prototype.forEach.call(svg.querySelectorAll(".pie-slice"),function(x){x.classList.remove("selected");});path.classList.add("selected");info.innerHTML='<b>'+esc(catName(it.cid))+'</b><span class="tab">'+money(it.amt,false)+' · '+Math.round(it.amt/total*100)+'%</span>';};path.addEventListener("click",show);path.addEventListener("touchstart",show,{passive:true});path.addEventListener("focus",show);svg.appendChild(path);ang+=pct;});
+  wrap.appendChild(svg);info.innerHTML='<b>Total spent</b><span class="tab">'+money(total,false)+'</span>';wrap.appendChild(info);container.appendChild(wrap);
+}
+function drawTrendChart(container,series){
+  var card=el("div","trend-line-card"),head=el("div","trend-line-head");head.innerHTML='<div><b>Expenditure & savings</b><small>Tap a point for exact values</small></div><div class="trend-legend"><span><i class="expense-dot"></i>Spend</span><span><i class="save-dot"></i>Net saved</span></div>';card.appendChild(head);
+  var chart=el("div","linechart"),svg=svgEl("svg",{viewBox:"0 0 360 190",preserveAspectRatio:"none",role:"img","aria-label":"Expenditure and savings trend"}),tip=el("div","line-tip");
+  var vals=[];series.forEach(function(s){vals.push(s.expense);if(s.saved!=null)vals.push(s.saved);});var min=Math.min(0,Math.min.apply(null,vals)),max=Math.max(1,Math.max.apply(null,vals));if(max===min)max=min+1;var left=26,right=350,top=15,bottom=153,w=right-left,h=bottom-top;
+  function y(v){return top+(max-v)/(max-min)*h;} function x(i){return series.length===1?(left+right)/2:left+i*w/(series.length-1);}
+  var zero=y(0);svg.appendChild(svgEl("line",{x1:left,y1:zero,x2:right,y2:zero,class:"chart-zero"}));
+  [0,.25,.5,.75,1].forEach(function(f){var yy=top+h*f;svg.appendChild(svgEl("line",{x1:left,y1:yy,x2:right,y2:yy,class:"chart-grid"}));});
+  function pathFor(key){var d="",open=false;series.forEach(function(s,i){var v=s[key];if(v==null){open=false;return;}d+=(open?" L ":"M ")+x(i)+" "+y(v);open=true;});return d;}
+  svg.appendChild(svgEl("path",{d:pathFor("expense"),class:"chart-line expense-line"}));var sp=pathFor("saved");if(sp)svg.appendChild(svgEl("path",{d:sp,class:"chart-line save-line"}));
+  series.forEach(function(s,i){var xx=x(i);var hit=svgEl("rect",{x:Math.max(0,xx-18),y:0,width:36,height:190,fill:"transparent",class:"chart-hit",tabindex:"0"});var show=function(){var saving=s.saved==null?"Savings not tracked — add income entries":"Net saved "+(s.saved<0?"-":"")+money(Math.abs(s.saved),false);tip.innerHTML='<b>'+esc(s.label)+'</b><span>Spent '+money(s.expense,false)+' · '+saving+(s.income?' · Income '+money(s.income,false):'')+'</span>';Array.prototype.forEach.call(svg.querySelectorAll(".chart-point"),function(q){q.classList.remove("active");});var a=svg.querySelector('[data-i="'+i+'"]'),b=svg.querySelector('[data-j="'+i+'"]');if(a)a.classList.add("active");if(b)b.classList.add("active");};hit.addEventListener("click",show);hit.addEventListener("touchstart",show,{passive:true});hit.addEventListener("focus",show);svg.appendChild(hit);var p1=svgEl("circle",{cx:xx,cy:y(s.expense),r:4,class:"chart-point expense-point","data-i":i});svg.appendChild(p1);if(s.saved!=null){var p2=svgEl("circle",{cx:xx,cy:y(s.saved),r:4,class:"chart-point save-point","data-j":i});svg.appendChild(p2);}var lab=svgEl("text",{x:xx,y:176,class:"chart-label","text-anchor":"middle"});lab.textContent=s.label;svg.appendChild(lab);});
+  chart.appendChild(svg);chart.appendChild(tip);card.appendChild(chart);container.appendChild(card);
+}
+
 function drawStats(){
   document.getElementById("hLabel").textContent=pLabel(hStart);
   var box=document.getElementById("statsBody"); if(!box)return; box.innerHTML="";
@@ -739,14 +1190,9 @@ function drawStats(){
   if(!list.length){box.appendChild(el("div","empty","Nothing to analyse in this period yet."));return;}
   var by={}; list.forEach(function(t){by[t.cat]=(by[t.cat]||0)+t.sgd;});
   var items=Object.keys(by).map(function(cid){return {cid:cid,amt:by[cid]};}).sort(function(x,y){return y.amt-x.amt;});
-  var card=el("div","stats-card"), top=el("div","stats-top"), donut=el("div","donut"), center=el("div","donut-center");
-  var pos=0, seg=[]; items.forEach(function(it){var pct=it.amt/total*100;seg.push(hueOf(it.cid)+" "+pos.toFixed(2)+"% "+(pos+pct).toFixed(2)+"%");pos+=pct;});
-  donut.style.background="conic-gradient("+seg.join(",")+")"; center.appendChild(el("small",null,"Spent"));center.appendChild(el("b","tab",money(total,false)));donut.appendChild(center);top.appendChild(donut);
-  var summary=el("div","stats-summary");summary.appendChild(el("span",null,list.length+(list.length===1?" transaction":" transactions")));summary.appendChild(el("b",null,items.length+" categories"));summary.appendChild(el("small",null,"Tap a category in List view to inspect entries."));top.appendChild(summary);card.appendChild(top);
-  var cats=el("div","stats-cats");items.forEach(function(it){var c=catOf(it.cid),r=el("div","stats-cat"),l=el("span","stats-cat-left");if(c)l.appendChild(iconBadge(c));var tx=el("span");tx.appendChild(el("b",null,catName(it.cid)));tx.appendChild(el("small",null,Math.round(it.amt/total*100)+"% of spending"));l.appendChild(tx);r.appendChild(l);r.appendChild(el("b","tab",money(it.amt,false)));cats.appendChild(r);});card.appendChild(cats);box.appendChild(card);
-  var trend=el("div","stats-card"), title=el("div","stats-title");title.appendChild(el("b",null,"Weekly pace"));title.appendChild(el("span",null,"within this budget period"));trend.appendChild(title);
-  var bars=el("div","trend-bars"), vals=[], cur=new Date(a), wi=1;while(cur<b){var e=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+7);if(e>b)e=b;vals.push({lab:"W"+wi,amt:spent(cur,e)});cur=e;wi++;}
-  var mx=Math.max.apply(null,vals.map(function(v){return v.amt;}));vals.forEach(function(v){var col=el("div","trend-col"),bar=el("i","trend-bar");bar.style.height=(mx?Math.max(5,v.amt/mx*100):0)+"%";bar.title=money(v.amt);col.appendChild(el("span","trend-value tab",money(v.amt,false)));col.appendChild(bar);col.appendChild(el("small",null,v.lab));bars.appendChild(col);});trend.appendChild(bars);box.appendChild(trend);
+  var card=el("div","stats-card"),title=el("div","stats-title");title.appendChild(el("b",null,"Spending mix"));title.appendChild(el("span",null,list.length+(list.length===1?" transaction":" transactions")));card.appendChild(title);drawSpendPie(card,items,total);
+  var cats=el("div","stats-cats");items.forEach(function(it){var c=catOf(it.cid),r=el("button","stats-cat"),l=el("span","stats-cat-left");if(c)l.appendChild(iconBadge(c));var tx=el("span");tx.appendChild(el("b",null,catName(it.cid)));tx.appendChild(el("small",null,Math.round(it.amt/total*100)+"% of spending"));l.appendChild(tx);r.appendChild(l);r.appendChild(el("b","tab",money(it.amt,false)));r.addEventListener("click",function(){S.historyView="list";save();drawHist();var f=document.getElementById("hCatFilter");if(f){f.value=it.cid;drawHistoryList();}});cats.appendChild(r);});card.appendChild(cats);box.appendChild(card);
+  var range=el("div","trend-range seg");[3,6,12].forEach(function(n){var bt=el("button",null,n+" periods");bt.setAttribute("aria-pressed",n===(S.insightPeriods||6)?"true":"false");bt.onclick=function(){S.insightPeriods=n;save();drawStats();};range.appendChild(bt);});box.appendChild(range);drawTrendChart(box,statsPeriodSeries(S.insightPeriods||6));
 }
 function drawHist(){
   var cf=document.getElementById("hCatFilter"), af=document.getElementById("hAccountFilter");
@@ -849,7 +1295,9 @@ function drawSetup(){
   var n=S.txns.length;
   document.getElementById("cnt").textContent=n+(n===1?" entry logged":" entries logged");
   var sc=document.getElementById("shortcuts"); sc.innerHTML="";
-  var base=location.href.split("?")[0];
+  var base=location.href.split("?")[0].split("#")[0];
+  var cl=document.getElementById("captureLink");if(cl)cl.textContent=base+"#capture=1&app=DBS&text=[URL-ENCODED NOTIFICATION TEXT]";
+  var hs=document.getElementById("historicalStatus");if(hs){var hi=S.historicalImports||[];hs.textContent=hi.length?("Historical migration completed: "+hi.reduce(function(a,x){return a+(x.spending||0)+(x.ledger||0);},0)+" records across "+hi.length+" import"+(hi.length===1?"":"s")+"."):"No historical migration imported yet.";}
   S.cats.slice(0,4).forEach(function(c){
     var v=(c.quick&&c.quick[0])||500;
     var d=el("div",null,c.name+" "+(v/100).toFixed(2)+" → "+base+"?log="+c.id+"&amt="+v);
@@ -857,6 +1305,13 @@ function drawSetup(){
     sc.appendChild(d);
   });
   drawRecHist();
+  var ss=document.getElementById("statementStatus");
+  if(ss){
+    if(S.imports.length){
+      var im=S.imports[S.imports.length-1];
+      ss.textContent="Last CSV check: "+im.label+" · "+im.matched+" matched, "+im.missing+" missing · difference "+(im.difference<0?"-":"")+money(Math.abs(im.difference),false)+".";
+    } else ss.textContent="CSV works fully on-device. PDF 3.1 beta extracts text in a sandboxed parser, then all matching/review happens locally.";
+  }
   var wb=document.getElementById("warnBox"); wb.innerHTML="";
   var le=document.getElementById("lastExp");
   if(S.lastExport){
@@ -897,6 +1352,8 @@ document.getElementById("addCat").addEventListener("click",function(){
   var i=document.getElementById("newCat"), v=i.value.trim(); if(!v) return;
   S.cats.push({id:"c"+Date.now(),name:v,icon:"dots",cap:0,quick:[500,1000,2000,5000]}); i.value=""; save(); redraw(); });
 document.getElementById("addAccount").addEventListener("click",function(){openAccount();});
+document.getElementById("addGoal").addEventListener("click",function(){openGoal();});
+document.getElementById("addLedger").addEventListener("click",function(){openLedger();});
 document.getElementById("addRecurring").addEventListener("click",function(){openRecurring();});
 document.getElementById("commitmentNote").addEventListener("click",function(){go("plan");});
 document.getElementById("addDebt").addEventListener("click",function(){
@@ -904,6 +1361,32 @@ document.getElementById("addDebt").addEventListener("click",function(){
   S.debts.push({id:"d"+Date.now(),name:v,start:0,bal:0,rate:0}); i.value=""; save(); redraw();
   toast("Tap it to set the balance"); });
 document.getElementById("recNow").addEventListener("click",function(){ openRec(lastClosedPeriod()); });
+function parsePdfDateToken(tok,yearHint){var m=String(tok||"").match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?$/);if(!m)return null;var d=+m[1],mo=+m[2],y=m[3]?+m[3]:yearHint;if(y<100)y+=2000;if(!y)y=(new Date()).getFullYear();var dt=new Date(y,mo-1,d);return isNaN(dt.getTime())?null:dt;}
+function pdfLinesToRows(lines){var rows=[],yearHint=(new Date()).getFullYear(),pending=null;lines.forEach(function(line){var yr=line.match(/\b(20\d{2})\b/);if(yr)yearHint=+yr[1];var dm=line.match(/^\s*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)\s+(.*)$/);if(dm){var dt=parsePdfDateToken(dm[1],yearHint);if(!dt)return;var rest=dm[2],nums=rest.match(/(?:SGD|S\$|RM)?\s*-?\d[\d,]*\.\d{2}/g)||[];if(!nums.length)return;var vals=nums.map(function(x){return parseFloat(x.replace(/[^0-9.-]/g,"").replace(/,/g,""));}).filter(function(x){return !isNaN(x);});if(!vals.length)return;var amt=vals.length>1?vals[vals.length-2]:vals[0],desc=rest.replace(/(?:SGD|S\$|RM)?\s*-?\d[\d,]*\.\d{2}/g," ").replace(/\s+/g," ").trim();var low=rest.toLowerCase(),credit=/credit|deposit|salary|refund|interest paid|transfer in/.test(low),debit=/debit|withdrawal|purchase|payment|fee|transfer out/.test(low);var out=0,inc=0;if(amt<0)out=Math.abs(amt);else if(credit&&!debit)inc=amt;else out=amt;rows.push({date:iso(dt),desc:desc,out:Math.round(out*100),inc:Math.round(inc*100)});}});return rows;}
+function extractPdfStatement(file){
+  if(!navigator.onLine){toast("PDF import needs internet once. CSV remains fully offline.");return;}
+  toast("Reading PDF…");var frame=document.createElement("iframe");frame.setAttribute("sandbox","allow-scripts");frame.style.display="none";var token="pdf"+Date.now();var src='<!doctype html><meta charset="utf-8"><script type="module">import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";addEventListener("message",async e=>{if(!e.data||e.data.type!=="parse")return;try{let pdf=await pdfjsLib.getDocument({data:e.data.buf,isEvalSupported:false}).promise,lines=[];for(let n=1;n<=pdf.numPages;n++){let pg=await pdf.getPage(n),tc=await pg.getTextContent(),items=tc.items.map(x=>({s:x.str,x:x.transform[4],y:x.transform[5]})).sort((a,b)=>Math.abs(b.y-a.y)>2?b.y-a.y:a.x-b.x),cur=[],lastY=null;for(let it of items){if(lastY!==null&&Math.abs(it.y-lastY)>2){if(cur.length)lines.push(cur.join(" "));cur=[];}cur.push(it.s);lastY=it.y;}if(cur.length)lines.push(cur.join(" "));}parent.postMessage({type:"pdfdone",token:e.data.token,lines},"*");}catch(err){parent.postMessage({type:"pdferr",token:e.data.token,message:String(err&&err.message||err)},"*");}});<\/script>';
+  var timer=setTimeout(function(){cleanup();toast("PDF parser timed out. CSV is still available offline.");},30000),loaded=false,buf=null;
+  function cleanup(){clearTimeout(timer);window.removeEventListener("message",onmsg);try{frame.remove();}catch(e){}}
+  function send(){if(!loaded||!buf)return;try{frame.contentWindow.postMessage({type:"parse",token:token,buf:buf},"*",[buf]);buf=null;}catch(e){cleanup();toast("Could not pass this PDF to the parser");}}
+  function onmsg(e){var d=e.data||{};if(d.token!==token)return;if(d.type==="pdferr"){cleanup();toast("Could not read this PDF");return;}if(d.type==="pdfdone"){cleanup();var rows=pdfLinesToRows(d.lines||[]);if(!rows.length){openPdfTextFallback(file.name,d.lines||[]);return;}openPdfAccountConfirm(file.name,rows);}}
+  window.addEventListener("message",onmsg);frame.onload=function(){loaded=true;send();};frame.srcdoc=src;document.body.appendChild(frame);
+  file.arrayBuffer().then(function(b){buf=b;send();}).catch(function(){cleanup();toast("Could not open that PDF");});
+}
+
+function openPdfAccountConfirm(name,rows){openSheet('<div class="pull"></div><b style="font-size:17px">PDF statement found</b><p class="hint">Budget Margin extracted '+rows.length+' transaction-like rows. PDF layouts vary, so review the totals before accepting.</p><div class="field"><label for="pdfAcc">Account</label><select id="pdfAcc">'+ledgerAccountOptions(S.defaultAccount||"","Choose statement account")+'</select></div><div class="block"><div class="flex"><span class="dim">Money out</span><b>'+money(rows.reduce(function(a,r){return a+(r.out||0);},0),false)+'</b></div><div class="flex" style="margin-top:8px"><span class="dim">Money in</span><b>'+money(rows.reduce(function(a,r){return a+(r.inc||0);},0),false)+'</b></div></div><button class="go" id="pdfUse">Compare with book</button><button class="flat" id="pdfCancel">Cancel</button>');document.getElementById("pdfCancel").onclick=shut;document.getElementById("pdfUse").onclick=function(){var a=document.getElementById("pdfAcc").value;if(!a){toast("Choose the statement account");return;}analyzeStatement(name,a,rows,"pdf");};}
+function openPdfTextFallback(name,lines){openSheet('<div class="pull"></div><b style="font-size:17px">PDF needs a template</b><p class="hint">Text was extracted, but the generic parser could not confidently identify transactions. This usually means the bank uses a different table layout or the PDF is scanned.</p><div class="pdf-text-sample">'+esc((lines||[]).slice(0,18).join("\n"))+'</div><button class="flat" id="pdfClose">Close</button>');document.getElementById("pdfClose").onclick=shut;}
+
+
+document.getElementById("historicalImport").addEventListener("click",function(){document.getElementById("historicalFile").click();});
+document.getElementById("historicalFile").addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var reader=new FileReader();reader.onload=function(){previewHistorical(String(reader.result||""),f.name);};reader.readAsText(f);this.value="";});
+document.getElementById("testCapture").addEventListener("click",function(){addCapture(parseNotificationText("Old Chang Kee, Singapore, SG\nSGD 4.90",{app:"DBS Bank"}));});
+document.getElementById("statementImport").addEventListener("click",function(){document.getElementById("statementFile").click();});
+document.getElementById("statementFile").addEventListener("change",function(){
+  var f=this.files&&this.files[0];if(!f)return;var isPdf=/\.pdf$/i.test(f.name)||f.type==="application/pdf";if(isPdf){extractPdfStatement(f);this.value="";return;}var reader=new FileReader();
+  reader.onload=function(){try{var rows=parseCsv(String(reader.result||""));openStatementMapping(f.name,rows);}catch(e){toast("Could not read that statement file");}};
+  reader.readAsText(f);this.value="";
+});
 document.getElementById("expJson").addEventListener("click",function(){
   download("budget-margin-backup-"+iso(today())+".json",JSON.stringify(S),"application/json"); toast("Backup exported"); });
 document.getElementById("expCsv").addEventListener("click",function(){
@@ -919,7 +1402,7 @@ document.getElementById("impFile").addEventListener("change",function(){
       var p=JSON.parse(r.result);
       if(!p||!Array.isArray(p.txns)||!Array.isArray(p.cats)) throw 0;
       if(!confirm("Replace everything on this phone with the backup, which holds "+p.txns.length+" entries?")) return;
-      S=p; if(!S.accent)S.accent="jade"; if(!S.theme)S.theme="midnight"; if(!S.historyView)S.historyView="list"; if(!Array.isArray(S.bookmarks))S.bookmarks=[]; if(!Array.isArray(S.accounts))S.accounts=[]; if(!Array.isArray(S.recurring))S.recurring=[]; if(!S.recurringDone||typeof S.recurringDone!=="object")S.recurringDone={}; if(!S.defaultAccount)S.defaultAccount=""; var defs=["fork","cart","cup","car","bag","spark","dots"]; S.cats.forEach(function(c,i){if(!c.icon)c.icon=defs[i%defs.length];}); save(); hStart=pStart(today()); redraw(); toast("Backup restored");
+      S=p; if(!S.accent)S.accent="jade"; if(!S.theme)S.theme="midnight"; if(!S.historyView)S.historyView="list"; if(!Array.isArray(S.bookmarks))S.bookmarks=[]; if(!Array.isArray(S.accounts))S.accounts=[]; if(!Array.isArray(S.recurring))S.recurring=[]; if(!S.recurringDone||typeof S.recurringDone!=="object")S.recurringDone={}; if(!Array.isArray(S.ledger))S.ledger=[]; if(!Array.isArray(S.goals))S.goals=[]; if(!Array.isArray(S.goalContrib))S.goalContrib=[]; if(!Array.isArray(S.imports))S.imports=[]; if(!S.merchantRules||typeof S.merchantRules!=="object")S.merchantRules={}; if(!Array.isArray(S.captures))S.captures=[]; if(!Array.isArray(S.historicalImports))S.historicalImports=[]; if(!S.defaultAccount)S.defaultAccount=""; S.accounts.forEach(function(a){if(a.baseBalance==null)a.baseBalance=a.balance||0;if(!a.snapshotAt)a.snapshotAt=Date.now();}); var defs=["fork","cart","cup","car","bag","spark","dots"]; S.cats.forEach(function(c,i){if(!c.icon)c.icon=defs[i%defs.length];}); save(); hStart=pStart(today()); redraw(); toast("Backup restored");
     }catch(e){ toast("That file is not a Budget Margin backup"); }
   };
   r.readAsText(f); this.value=""; });
@@ -944,12 +1427,12 @@ document.getElementById("recoverPrev").addEventListener("click",function(){
   var raw=null; try{raw=localStorage.getItem(PREV_KEY);}catch(e){}
   if(!raw){toast("No previous local state is available");return;}
   if(!confirm("Replace the current state with the previous locally saved state?"))return;
-  try{ var p=JSON.parse(raw); if(!p||!Array.isArray(p.txns)||!Array.isArray(p.cats))throw 0; S=p; if(!S.accent)S.accent="jade"; if(!S.theme)S.theme="midnight"; if(!S.historyView)S.historyView="list"; if(!Array.isArray(S.bookmarks))S.bookmarks=[]; if(!Array.isArray(S.accounts))S.accounts=[]; if(!Array.isArray(S.recurring))S.recurring=[]; if(!S.recurringDone||typeof S.recurringDone!=="object")S.recurringDone={}; if(!S.defaultAccount)S.defaultAccount=""; localStorage.setItem(KEY,JSON.stringify(S)); redraw(); toast("Previous state recovered"); }
+  try{ var p=JSON.parse(raw); if(!p||!Array.isArray(p.txns)||!Array.isArray(p.cats))throw 0; S=p; if(!S.accent)S.accent="jade"; if(!S.theme)S.theme="midnight"; if(!S.historyView)S.historyView="list"; if(!Array.isArray(S.bookmarks))S.bookmarks=[]; if(!Array.isArray(S.accounts))S.accounts=[]; if(!Array.isArray(S.recurring))S.recurring=[]; if(!S.recurringDone||typeof S.recurringDone!=="object")S.recurringDone={}; if(!Array.isArray(S.ledger))S.ledger=[]; if(!Array.isArray(S.goals))S.goals=[]; if(!Array.isArray(S.goalContrib))S.goalContrib=[]; if(!Array.isArray(S.imports))S.imports=[]; if(!S.merchantRules||typeof S.merchantRules!=="object")S.merchantRules={}; if(!Array.isArray(S.captures))S.captures=[]; if(!Array.isArray(S.historicalImports))S.historicalImports=[]; if(!S.defaultAccount)S.defaultAccount=""; S.accounts.forEach(function(a){if(a.baseBalance==null)a.baseBalance=a.balance||0;if(!a.snapshotAt)a.snapshotAt=Date.now();}); localStorage.setItem(KEY,JSON.stringify(S)); redraw(); toast("Previous state recovered"); }
   catch(e){toast("The previous local state could not be recovered");}
 });
 document.getElementById("checkUpdate").addEventListener("click",function(){
   if(updateReady&&swReg&&swReg.waiting){ swReg.waiting.postMessage({type:"SKIP_WAITING"}); return; }
-  if(swReg){ document.getElementById("updateText").textContent="Checking…"; swReg.update().then(function(){ setTimeout(function(){ if(!updateReady){document.getElementById("updateText").textContent="You already have the latest Budget Margin 2.1 files.";} },500); }).catch(function(){toast("Could not check for updates");}); }
+  if(swReg){ document.getElementById("updateText").textContent="Checking…"; swReg.update().then(function(){ setTimeout(function(){ if(!updateReady){document.getElementById("updateText").textContent="You already have the latest Budget Margin 3.2 files.";} },500); }).catch(function(){toast("Could not check for updates");}); }
   else toast("Update checks work after Budget Margin is served over HTTPS");
 });
 
@@ -976,7 +1459,7 @@ function updatePwaState(){
   document.getElementById("pwaTitle").textContent=standalone?"Home Screen app":"Browser mode";
   document.getElementById("pwaText").textContent=!secure?"Publish through HTTPS (GitHub Pages works) to unlock offline app caching.":standalone?(online?"Installed and ready. Your data remains local on this device.":"Offline — Budget Margin is running from its cached app shell."):"Add Budget Margin to your Home Screen for a standalone app experience.";
   var u=document.getElementById("updateText"), b=document.getElementById("checkUpdate");
-  if(u)u.textContent=updateReady?"Budget Margin 2.1 update ready — apply it now.":(online?"Budget Margin 2.1 · updates checked when the app opens.":"Offline · update check paused.");
+  if(u)u.textContent=updateReady?"Budget Margin 3.2 update ready — apply it now.":(online?"Budget Margin 3.2 · updates checked when the app opens.":"Offline · update check paused.");
   if(b)b.textContent=updateReady?"Update":"Check now";
 }
 function watchWorker(reg){
@@ -995,6 +1478,6 @@ if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostnam
   navigator.serviceWorker.addEventListener("controllerchange",function(){ if(updateReady) location.reload(); });
 }
 
-function redraw(){ applyTheme(); applyAccent(); drawGauge(); drawList(); drawQuickLogs(); drawRecent(); drawRecPrompt(); drawPlan(); drawDebt(); drawHist(); drawSetup(); updatePwaState(); setReorderMode(false); }
-redraw(); go("spend"); handleURL();
+function redraw(){ applyTheme(); applyAccent(); drawGauge(); drawList(); drawCaptureInbox(); drawQuickLogs(); drawRecent(); drawRecPrompt(); drawPlan(); drawDebt(); drawHist(); drawSetup(); updatePwaState(); setReorderMode(false); }
+redraw(); go("spend"); handleCaptureURL(); handleURL();
 })();

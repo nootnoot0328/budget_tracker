@@ -8,19 +8,18 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Budget Margin">
   <meta name="theme-color" content="#08171F">
-  <meta name="description" content="Budget Margin — a private, local-first budget, accounts and recurring commitments planner.">
+  <meta name="description" content="Budget Margin — local-first budgeting, capture inbox, historical migration and statement reconciliation.">
   <meta name="application-name" content="Budget Margin">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="stylesheet" href="./styles.css">
-  <title>Budget Margin 2.1 — Know what is truly free</title>
+  <title>Budget Margin 3.2</title>
 </head>
 <body>
 <main class="wrap">
   <header class="apphead">
     <div class="brand"><span class="brandmark"><svg viewBox="0 0 24 24"><path d="M5 16.5 9.5 12l3 3L19 8.5"/><path d="M15.5 8.5H19V12"/></svg></span><span>Budget Margin</span></div>
-    <span class="periodpill">Know what is truly free</span>
   </header>
 
   <section class="view on" id="v-spend">
@@ -51,6 +50,8 @@
     <button class="commitment-note" id="commitmentNote" type="button" hidden></button>
     </div>
     <div id="recBox" style="margin-top:14px"></div>
+    <div class="sectionhead capture-head"><h2>Capture inbox</h2><span id="captureCount">0 waiting</span></div>
+    <div id="captureInbox" class="capture-inbox"></div>
     <div class="sectionhead quick-head"><h2>Quick log</h2><span id="quickLogHint">saved favourites</span></div>
     <div id="quickLogs" class="quick-logs"></div>
     <div class="sectionhead envelope-head"><h2>Envelopes</h2><button class="textlink reorder-toggle" id="reorderToggle" aria-pressed="false">Reorder</button></div>
@@ -64,11 +65,11 @@
   </section>
 
   <section class="view" id="v-plan">
-    <div class="viewtitle">Plan</div><div class="viewsub">Accounts, upcoming commitments and debt in one place.</div>
+    <div class="viewtitle">Plan</div><div class="viewsub">Your cash, commitments, goals and next moves in one place.</div>
 
     <div class="plan-forecast hero">
       <div class="plan-forecast-head"><span>This budget period</span><b id="planPeriodLabel">—</b></div>
-      <div class="plan-free"><span>Available after commitments</span><b class="tab" id="planFree">—</b></div>
+      <div class="plan-free"><span>Free margin</span><b class="tab" id="planFree">—</b></div>
       <div class="plan-grid">
         <div><span>Envelope left</span><b class="tab" id="planEnvelopeLeft">—</b></div>
         <div><span>Reserved bills</span><b class="tab" id="planReserved">—</b></div>
@@ -76,6 +77,19 @@
       </div>
       <p class="plan-note">Expected income is shown for planning, but is not counted in Safe today until it actually arrives.</p>
     </div>
+
+
+
+    <div class="sectionhead"><h2>30-day forecast</h2><span id="forecastSummary">planned cash flow</span></div>
+    <div class="forecast-list" id="forecastList"></div>
+
+    <div class="sectionhead"><h2>Goals & sinking funds</h2><button class="textlink" id="addGoal">+ Goal</button></div>
+    <div class="goal-summary" id="goalSummary"></div>
+    <div class="goal-list" id="goalList"></div>
+
+    <div class="sectionhead"><h2>Ledger</h2><button class="textlink" id="addLedger">+ Entry</button></div>
+    <div class="ledger-summary" id="ledgerSummary"></div>
+    <div class="ledger-list" id="ledgerList"></div>
 
     <div class="sectionhead"><h2>Accounts</h2><button class="textlink" id="addAccount">+ Add</button></div>
     <div class="account-summary" id="accountSummary"></div>
@@ -156,16 +170,38 @@
       <div class="flex"><span class="dim">Total each period</span><b class="tab" id="capTotal">—</b></div>
     </div>
 
-    <h2>Check against your bank</h2>
+    <h2>Historical migration</h2>
     <div class="block">
-      <p class="tiny dim" style="margin:0 0 11px">Compare what you logged with what your accounts actually show. The gap is what you are missing.</p>
-      <button class="sm" id="recNow">Check last period</button>
+      <p class="tiny dim" style="margin:0 0 11px">One-time import for your canonical history file. Budget Margin keeps the original source marker so migrated records can be distinguished from day-to-day entries.</p>
+      <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
+        <button class="sm" id="historicalImport">Import canonical CSV</button>
+      </div>
+      <input type="file" id="historicalFile" accept=".csv,text/csv" style="display:none">
+      <div id="historicalStatus" class="tiny dim" style="margin-top:11px"></div>
+    </div>
+
+    <h2>Month-end reconciliation</h2>
+    <div class="block">
+      <p class="tiny dim" style="margin:0 0 11px">Import a bank/card CSV or text-based PDF, compare it with Budget Margin, review anything unmatched, then close the month. CSV works fully offline; PDF extraction needs internet for the pinned PDF.js parser.</p>
+      <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
+        <button class="sm" id="statementImport">Import CSV / PDF</button>
+        <button class="sm" id="recNow">Manual check</button>
+      </div>
+      <input type="file" id="statementFile" accept=".csv,.xls,.txt,.pdf,text/csv,text/plain,application/pdf" style="display:none">
+      <div id="statementStatus" class="tiny dim" style="margin-top:11px"></div>
       <div id="recHist" class="tiny dim" style="margin-top:11px"></div>
+    </div>
+
+    <h2>iPhone capture bridge</h2>
+    <div class="block">
+      <p class="tiny dim" style="margin:0 0 9px">For iOS 27 notification automations, have Shortcuts open Budget Margin with the notification text in the URL fragment. The fragment is processed on-device and is not sent to GitHub Pages.</p>
+      <div id="captureLink" class="capture-link tiny"></div>
+      <button class="sm" id="testCapture" style="margin-top:10px">Test capture</button>
     </div>
 
     <h2>One tap from your home screen</h2>
     <div class="block">
-      <p class="tiny dim" style="margin:0 0 9px">Make an iOS Shortcut that opens a web page, paste a link below, and add it to your home screen. Tapping it logs the amount straight away.</p>
+      <p class="tiny dim" style="margin:0 0 9px">You can still make direct logging shortcuts for fixed amounts.</p>
       <div id="shortcuts" class="tiny"></div>
     </div>
 
@@ -190,7 +226,7 @@
       </div>
     </div>
 
-    <h2>App and offline <span class="versiontag">2.1</span></h2>
+    <h2>App and offline <span class="versiontag">3.2</span></h2>
     <div class="block">
       <div class="pwa-state" id="pwaState"><span class="pwa-dot"></span><div><b id="pwaTitle">Browser mode</b><div class="tiny dim" id="pwaText">Publish on GitHub Pages, then add Budget Margin to your Home Screen.</div></div></div>
       <div class="app-update-row">

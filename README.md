@@ -1,25 +1,33 @@
-# Budget Margin 2.1
+# Budget Margin 3.2
 
-A private, local-first budgeting PWA designed for GitHub Pages and iPhone Home Screen use.
+Local-first PWA for GitHub Pages. No server or API key is required.
 
-## 2.1 highlights
+## What is new
 
-- App renamed to **Budget Margin**
-- **Plan** tab combines accounts, recurring commitments and debt payoff
-- Manual account snapshots with Bank / Cash / Credit Card types
-- Spending can be tagged to an account
-- Recurring income and expenses: weekly, monthly or yearly
-- Upcoming expenses can be reserved from **Safe today**
-- Recurring expenses can be linked to an envelope and logged from the Upcoming list
-- History can be filtered by envelope and account
-- Existing Margin 2.0 data migrates in place using the same local storage key
+- Capture Inbox for iOS 27 Shortcuts notification automations.
+- Private URL-fragment bridge: notification text is passed after `#`, so it is handled by the browser and is not sent as a request to GitHub Pages.
+- Merchant/category memory for captured payments.
+- Confirmation-first workflow with transfer/card-payment classification.
+- One-time canonical historical CSV migration.
+- Historical records keep `source: historical_import`.
+- Statement CSV importer now scans for the real header row instead of assuming row 1, which supports DBS exports with account metadata before the transactions.
+- Text/CSV files with an `.xls` filename can also be selected, useful for bank exports that are CSV in disguise.
+- Date parsing supports formats such as `15 Sep 2026` and `14-Sep-2026`.
 
-## Deploy
+## iOS 27 notification bridge
 
-Upload the files in this folder to the root of your GitHub repository and enable **Settings → Pages → Deploy from a branch → main → /(root)**.
+Create a Shortcuts personal automation triggered by a notification from your bank app. Build a URL based on your Budget Margin address using this pattern:
 
-Keep the same Pages URL when upgrading so the browser can continue using the same local data. Export a backup before any major update.
+`https://YOURNAME.github.io/YOUR-REPO/#capture=1&app=DBS&text=URL_ENCODED_NOTIFICATION_TEXT`
 
-## Privacy
+Then use **Open URLs**. Budget Margin will parse the merchant and amount and place the candidate transaction in **Capture inbox** for confirmation.
 
-No personal balances are hard-coded into this repository. Your live data is stored locally in the browser on your device. Never commit an exported backup JSON to a public repository.
+The exact Shortcuts variable names shown by iOS can differ by notification/app. The app only requires that the final notification body be URL-encoded into the `text` parameter. Optional parameters are `merchant`, `amount`, `cur`, and `timestamp`.
+
+## Historical migration
+
+Settings → Historical migration → Import canonical CSV. This is intended for the one-time `all_accounts_canonical.csv` migration. Existing records are merged, not replaced. Export a backup first.
+
+## GitHub Pages
+
+Publish the repository root from `main` via Settings → Pages. Keep all files in this folder at the repository root.

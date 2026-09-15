@@ -1,7 +1,7 @@
 {
   "name": "Budget Margin",
   "short_name": "Budget Margin",
-  "description": "Local-first envelope budgeting with accounts, recurring commitments, debt and spending insights.",
+  "description": "Local-first budgeting with notification capture inbox, historical migration, statement reconciliation, forecasts, goals and analytics.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
