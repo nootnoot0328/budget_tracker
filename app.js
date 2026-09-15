@@ -60,7 +60,12 @@ function uid(){ S.nextId=(S.nextId||100)+1; return "t"+S.nextId; }
 function grp(s){ return s.replace(/\B(?=(\d{3})+(?!\d))/g,","); }
 function money(c,dec){ var v=Math.abs(Math.round(c));
   return (c<0?"-":"")+"S$"+(dec===false?grp(String(Math.round(v/100))):grp((v/100).toFixed(2))); }
-function rmf(c){ return "RM"+grp((Math.abs(c)/100).toFixed(2)); }
+function rmf(c){ return (c<0?"-":"")+"RM"+grp((Math.abs(c)/100).toFixed(2)); }
+function accountMoney(c,cur,dec){
+  cur=(cur||"SGD").toUpperCase();var v=Math.abs(Math.round(c)),sign=c<0?"-":"";
+  var n=dec===false?grp(String(Math.round(v/100))):grp((v/100).toFixed(2));
+  return sign+(cur==="MYR"?"RM":cur==="SGD"?"S$":cur+" ")+n;
+}
 function toCents(x){ var n=parseFloat(String(x).replace(/[^0-9.]/g,"")); return (isNaN(n)||n<0)?0:Math.round(n*100); }
 function p2(n){ return n<10?"0"+n:""+n; }
 function iso(d){ return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); }
@@ -186,16 +191,16 @@ function reservedCommitments(a,b){ var occ=periodOccurrences(a,b).filter(functio
 function expectedIncome(a,b){ var occ=periodOccurrences(a,b).filter(function(o){return !o.done&&o.rec.type==="income";}); return {amount:occ.reduce(function(n,o){return n+amountSgd(o.rec);},0),count:occ.length,items:occ}; }
 function nextOccurrence(r){ var a=new Date(today().getFullYear(),today().getMonth(),today().getDate()-31), b=new Date(today().getFullYear()+2,today().getMonth(),today().getDate()+1); var all=occurrencesBetween(r,a,b).filter(function(o){return !o.done&&pIso(o.date)>=today();}); return all[0]||null; }
 function dateShort(ds){ var d=pIso(ds); return d.getDate()+" "+MO[d.getMonth()]; }
-function accountTypeLabel(t){ return t==="credit"?"Credit card":t==="cash"?"Cash":"Bank account"; }
+function accountTypeLabel(t){ return t==="credit"?"Credit card":t==="cash"?"Cash":t==="loan"?"Loan":"Bank account"; }
 function ledgerAmountSgd(x){ return x.cur==="MYR"?Math.round((x.amount||0)/(S.rate||3.35)):(x.amount||0); }
 function accountCurrent(a){
   var v=(a.baseBalance!=null?a.baseBalance:(a.balance||0)), snap=a.snapshotAt||0;
   S.txns.forEach(function(t){
-    if(t.account!==a.id||!t.createdAt||t.createdAt<=snap)return;
+    if(t.account!==a.id||t.source==="historical_import"||!t.createdAt||t.createdAt<=snap)return;
     v += a.type==="credit" ? (t.sgd||0) : -(t.sgd||0);
   });
   S.ledger.forEach(function(x){
-    if(!x.createdAt||x.createdAt<=snap)return;
+    if(x.source==="historical_import"||!x.createdAt||x.createdAt<=snap)return;
     var amt=ledgerAmountSgd(x);
     if(x.type==="income"&&x.account===a.id) v += a.type==="credit"?-amt:amt;
     else if(x.type==="expense"&&x.account===a.id) v += a.type==="credit"?amt:-amt;
@@ -212,9 +217,12 @@ function accountCurrent(a){
   return Math.round(v);
 }
 function liquidTotals(){
-  var liquid=0, credit=0;
-  S.accounts.forEach(function(a){var v=accountCurrent(a); if(a.type==="credit")credit+=v; else liquid+=v;});
-  return {liquid:liquid,credit:credit,net:liquid-credit};
+  var liquid=0, credit=0, loans=0;
+  S.accounts.forEach(function(a){
+    var v=accountCurrent(a),sgd=(a.currency||"SGD").toUpperCase()==="MYR"?Math.round(v/(S.rate||3.35)):v;
+    if(a.type==="credit")credit+=Math.abs(sgd);else if(a.type==="loan")loans+=Math.abs(sgd);else liquid+=sgd;
+  });
+  return {liquid:liquid,credit:credit,loans:loans,net:liquid-credit-loans};
 }
 function goalReserveCurrent(){
   var ps=pStart(today()), pe=pShift(ps,1), due=0;
@@ -632,18 +640,44 @@ function handleCaptureURL(){
 }
 
 /* ── historical canonical migration (3.2) ── */
-function findOrCreateAccount(name,type,currency){name=(name||"Imported account").trim();var hit=S.accounts.find(function(a){return a.name.toLowerCase()===name.toLowerCase();});if(hit)return hit.id;var mapped=type==="credit_card"?"credit":type==="cash"?"cash":"bank",a={id:"a"+Date.now()+Math.floor(Math.random()*9999),name:name,type:mapped,balance:0,baseBalance:0,snapshotAt:Date.now(),updated:iso(today()),currency:currency||"SGD",source:"historical_import"};S.accounts.push(a);return a.id;}
+function findOrCreateAccount(name,type,currency){
+  name=(name||"Imported account").trim();var mapped=type==="credit_card"?"credit":type==="cash"?"cash":type==="loan"?"loan":"bank";
+  var hit=S.accounts.find(function(a){return a.name.toLowerCase()===name.toLowerCase();});
+  if(hit){if(!hit.currency)hit.currency=(currency||"SGD").toUpperCase();if(hit.type==="bank"&&mapped==="loan")hit.type="loan";return hit.id;}
+  var a={id:"a"+Date.now()+Math.floor(Math.random()*9999),name:name,type:mapped,balance:0,baseBalance:0,snapshotAt:Date.now(),updated:iso(today()),currency:(currency||"SGD").toUpperCase(),source:"historical_import",needsSnapshot:true};
+  S.accounts.push(a);return a.id;
+}
 function findOrCreateCategory(name){name=(name||"").trim();if(!name)return (S.cats.find(function(c){return c.name.toLowerCase()==="other";})||S.cats[0]||{}).id||"";var hit=S.cats.find(function(c){return c.name.toLowerCase()===name.toLowerCase();});if(hit)return hit.id;var c={id:"c"+Date.now()+Math.floor(Math.random()*9999),name:name,icon:"dots",cap:0,quick:[500,1000,2000,5000]};S.cats.push(c);return c.id;}
 function canonicalIndex(headers,name){return headers.findIndex(function(x){return String(x).trim().toLowerCase()===name;});}
 function previewHistorical(text,name){
   var rows=parseCsv(text);if(rows.length<2){toast("No transaction rows found");return;}var h=rows[0].map(function(x){return String(x).trim().toLowerCase();}),required=["account_name","account_type","currency","transaction_date","description","transaction_type","amount"],missing=required.filter(function(x){return h.indexOf(x)<0;});if(missing.length){toast("This is not the canonical history format");return;}
   var idx={};h.forEach(function(x,i){idx[x]=i;});var data=rows.slice(1).filter(function(r){return r[idx.transaction_date]&&r[idx.amount];});var accs={};data.forEach(function(r){accs[r[idx.account_name]||"Imported account"]=1;});
-  openSheet('<div class="pull"></div><b style="font-size:17px">Historical migration</b><p class="hint">'+esc(name)+' will be imported as historical records. This is intended as a one-time migration.</p><div class="migration-score"><div><span>Rows</span><b>'+data.length+'</b></div><div><span>Accounts</span><b>'+Object.keys(accs).length+'</b></div><div><span>Mode</span><b>Merge</b></div></div><div class="success-note">Existing Budget Margin entries are kept. Imported rows get a historical source marker. Re-importing the same file is blocked.</div><button class="go" id="histGo">Import history</button><button class="flat" id="histCancel">Cancel</button>');
+  openSheet('<div class="pull"></div><b style="font-size:17px">Historical migration</b><p class="hint">'+esc(name)+' will be imported as historical records. This is intended as a one-time migration.</p><div class="migration-score"><div><span>Rows</span><b>'+data.length+'</b></div><div><span>Accounts</span><b>'+Object.keys(accs).length+'</b></div><div><span>Mode</span><b>Merge</b></div></div><div class="success-note">Existing Budget Margin entries are kept. Historical rows build analytics only and do not change today’s account balances. Re-importing the same file is blocked.</div><button class="go" id="histGo">Import history</button><button class="flat" id="histCancel">Cancel</button>');
   document.getElementById("histCancel").onclick=shut;document.getElementById("histGo").onclick=function(){importHistoricalRows(data,idx,name);};
 }
 function importHistoricalRows(rows,idx,name){
-  var fileSig=name+"|"+rows.length+"|"+(rows[0]&&rows[0][idx.transaction_date]||"")+"|"+(rows[rows.length-1]&&rows[rows.length-1][idx.transaction_date]||"");if(S.historicalImports.some(function(x){return x.signature===fileSig;})){toast("This historical file appears to be imported already");return;}
-  var added=0,ledgerAdded=0,lastBal={};rows.forEach(function(r,n){var an=r[idx.account_name]||"Imported account",at=r[idx.account_type]||"bank",cur=(r[idx.currency]||"SGD").toUpperCase(),date=(r[idx.transaction_date]||"").trim(),desc=r[idx.description]||"",type=(r[idx.transaction_type]||"other").trim().toLowerCase(),amount=parseFloat(String(r[idx.amount]||"").replace(/,/g,""));if(!date||!isFinite(amount)||amount===0)return;var aid=findOrCreateAccount(an,at,cur),cents=Math.round(Math.abs(amount)*100),ref=idx.reference!=null?r[idx.reference]||"":"",merchant=idx.merchant!=null?r[idx.merchant]||"":"",hint=idx.category_hint!=null?r[idx.category_hint]||"":"",bal=idx.balance!=null?parseFloat(String(r[idx.balance]||"").replace(/,/g,"")):NaN;if(isFinite(bal))lastBal[aid]={balance:Math.round(Math.abs(bal)*100),date:date};var sourceId="hist:"+fileSig+":"+n;if(type==="expense"&&amount<0){var cat=findOrCreateCategory(hint||ruleCategory(merchant||desc)||"Other"),sgd=cur==="MYR"?Math.round(cents/S.rate):cents;S.txns.push({id:uid(),date:date,sgd:sgd,cur:cur,orig:cents,cat:cat,note:merchant||desc,account:aid,createdAt:Date.now(),source:"historical_import",sourceId:sourceId,reference:ref});added++;if(merchant)rememberRule(merchant,cat);}else{var lt=type;if(lt==="fee"||lt==="interest"||lt==="other")lt=amount<0?"expense":"income";if(lt==="refund")lt="refund";if(lt==="income"||lt==="expense"||lt==="refund"||lt==="transfer"||lt==="card_payment"){S.ledger.push({id:"l"+Date.now()+"_"+n,type:lt,account:(lt==="transfer"||lt==="card_payment")?"":aid,from:"",to:"",amount:cents,cur:cur,date:date,note:merchant||desc,createdAt:Date.now(),source:"historical_import",sourceId:sourceId,reference:ref});ledgerAdded++;}}});Object.keys(lastBal).forEach(function(aid){var a=accountOf(aid),b=lastBal[aid];if(a&&b){a.baseBalance=b.balance;a.balance=b.balance;a.snapshotAt=new Date(b.date+"T23:59:59").getTime();a.updated=b.date;}});S.historicalImports.push({id:"hi"+Date.now(),file:name,signature:fileSig,date:iso(today()),spending:added,ledger:ledgerAdded,rows:rows.length});save();shut();hStart=pStart(today());redraw();toast((added+ledgerAdded)+" historical records imported");}
+  var fileSig=name+"|"+rows.length+"|"+(rows[0]&&rows[0][idx.transaction_date]||"")+"|"+(rows[rows.length-1]&&rows[rows.length-1][idx.transaction_date]||"");
+  if(S.historicalImports.some(function(x){return x.signature===fileSig;})){toast("This historical file appears to be imported already");return;}
+  var added=0,ledgerAdded=0,createdAccounts={};
+  rows.forEach(function(r,n){
+    var an=r[idx.account_name]||"Imported account",at=r[idx.account_type]||"bank",cur=(r[idx.currency]||"SGD").toUpperCase(),date=(r[idx.transaction_date]||"").trim(),desc=r[idx.description]||"",type=(r[idx.transaction_type]||"other").trim().toLowerCase(),amount=parseFloat(String(r[idx.amount]||"").replace(/,/g,""));
+    if(!date||!isFinite(amount)||amount===0)return;
+    var before=S.accounts.length,aid=findOrCreateAccount(an,at,cur);if(S.accounts.length>before)createdAccounts[aid]=1;
+    var cents=Math.round(Math.abs(amount)*100),ref=idx.reference!=null?r[idx.reference]||"":"",merchant=idx.merchant!=null?r[idx.merchant]||"":"",hint=idx.category_hint!=null?r[idx.category_hint]||"":"",sourceId="hist:"+fileSig+":"+n;
+    if(type==="expense"&&amount<0){
+      var cat=findOrCreateCategory(hint||ruleCategory(merchant||desc)||"Other"),sgd=cur==="MYR"?Math.round(cents/(S.rate||3.35)):cents;
+      S.txns.push({id:uid(),date:date,sgd:sgd,cur:cur,orig:cents,cat:cat,note:merchant||desc,account:aid,createdAt:Date.now(),source:"historical_import",sourceId:sourceId,reference:ref,affectsBalance:false});added++;if(merchant)rememberRule(merchant,cat);
+    }else{
+      var lt=type;if(lt==="fee"||lt==="interest"||lt==="other")lt=amount<0?"expense":"income";if(lt==="refund")lt="refund";
+      if(lt==="income"||lt==="expense"||lt==="refund"||lt==="transfer"||lt==="card_payment"){
+        S.ledger.push({id:"l"+Date.now()+"_"+n,type:lt,account:(lt==="transfer"||lt==="card_payment")?"":aid,from:"",to:"",amount:cents,cur:cur,date:date,note:merchant||desc,createdAt:Date.now(),source:"historical_import",sourceId:sourceId,reference:ref,affectsBalance:false});ledgerAdded++;
+      }
+    }
+  });
+  S.historicalImports.push({id:"hi"+Date.now(),file:name,signature:fileSig,date:iso(today()),spending:added,ledger:ledgerAdded,rows:rows.length,createdAccounts:Object.keys(createdAccounts)});
+  save();shut();hStart=pStart(today());redraw();toast((added+ledgerAdded)+" historical records imported · account balances unchanged");
+}
+
 
 /* ── Plan screen ── */
 function drawPlan(){
@@ -784,7 +818,7 @@ function drawAccounts(){
     var current=accountCurrent(a), b=el("button","account-card"), left=el("span","account-left"), ico=el("span","account-icon");
     ico.innerHTML=iconSvg(accountIcon(a.type)); left.appendChild(ico);
     var cp=el("span"); cp.appendChild(el("b",null,a.name)); cp.appendChild(el("small",null,accountTypeLabel(a.type)+" · live from snapshot")); left.appendChild(cp); b.appendChild(left);
-    var right=el("span","account-balance"); right.appendChild(el("b","tab",money(current,false))); right.appendChild(el("small",null,a.type==="credit"?"owing":"available")); b.appendChild(right);
+    var right=el("span","account-balance"); right.appendChild(el("b","tab",accountMoney(current,a.currency||"SGD",false))); right.appendChild(el("small",null,a.needsSnapshot?"set current balance":(a.type==="credit"||a.type==="loan"?"owing":"available"))); b.appendChild(right);
     b.addEventListener("click",function(){openAccount(a.id);}); box.appendChild(b);
   });
 }
@@ -793,7 +827,8 @@ function openAccount(id){
   var shown=id?accountCurrent(a):(a.baseBalance||0);
   openSheet('<div class="pull"></div><b style="font-size:17px">'+(id?'Edit account':'Add account')+'</b>'+
     '<div class="field" style="margin-top:14px"><label for="aName">Name</label><input id="aName" autocomplete="off" value="'+esc(a.name)+'" placeholder="DBS Everyday"></div>'+
-    '<div class="field"><label for="aType">Type</label><select id="aType"><option value="bank"'+(a.type==='bank'?' selected':'')+'>Bank account</option><option value="cash"'+(a.type==='cash'?' selected':'')+'>Cash</option><option value="credit"'+(a.type==='credit'?' selected':'')+'>Credit card</option></select></div>'+
+    '<div class="field"><label for="aType">Type</label><select id="aType"><option value="bank"'+(a.type==='bank'?' selected':'')+'>Bank account</option><option value="cash"'+(a.type==='cash'?' selected':'')+'>Cash</option><option value="credit"'+(a.type==='credit'?' selected':'')+'>Credit card</option><option value="loan"'+(a.type==='loan'?' selected':'')+'>Loan</option></select></div>'+
+    '<div class="field"><label for="aCur">Currency</label><select id="aCur"><option value="SGD"'+((a.currency||'SGD')==='SGD'?' selected':'')+'>SGD</option><option value="MYR"'+(a.currency==='MYR'?' selected':'')+'>MYR</option></select></div>'+
     '<div class="field"><label for="aBal">'+(a.type==='credit'?'Current amount owing':'Current balance')+'</label><input id="aBal" type="text" inputmode="decimal" value="'+(shown/100).toFixed(2)+'"></div>'+
     '<p class="hint">Saving a balance creates a fresh snapshot. New spending, income, transfers and card payments after that snapshot move the live balance automatically.</p>'+
     '<button class="go" id="aSave">Save account</button>'+
@@ -801,7 +836,7 @@ function openAccount(id){
   document.getElementById("aCancel").onclick=shut;
   document.getElementById("aSave").onclick=function(){
     var name=document.getElementById("aName").value.trim(); if(!name){toast("Give the account a name");return;}
-    a.name=name; a.type=document.getElementById("aType").value; a.balance=toCents(document.getElementById("aBal").value); a.baseBalance=a.balance; a.snapshotAt=Date.now(); a.updated=iso(today());
+    a.name=name; a.type=document.getElementById("aType").value; a.currency=document.getElementById("aCur").value; a.balance=toCents(document.getElementById("aBal").value); a.baseBalance=a.balance; a.snapshotAt=Date.now(); a.updated=iso(today()); a.needsSnapshot=false;
     if(!id){S.accounts.push(a);if(!S.defaultAccount)S.defaultAccount=a.id;}
     save();shut();redraw();toast(id?"Account snapshot updated":"Account added");
   };
@@ -1297,7 +1332,7 @@ function drawSetup(){
   var sc=document.getElementById("shortcuts"); sc.innerHTML="";
   var base=location.href.split("?")[0].split("#")[0];
   var cl=document.getElementById("captureLink");if(cl)cl.textContent=base+"#capture=1&app=DBS&text=[URL-ENCODED NOTIFICATION TEXT]";
-  var hs=document.getElementById("historicalStatus");if(hs){var hi=S.historicalImports||[];hs.textContent=hi.length?("Historical migration completed: "+hi.reduce(function(a,x){return a+(x.spending||0)+(x.ledger||0);},0)+" records across "+hi.length+" import"+(hi.length===1?"":"s")+"."):"No historical migration imported yet.";}
+  var hs=document.getElementById("historicalStatus"),hr=document.getElementById("historicalRemove");if(hs){var hi=S.historicalImports||[];hs.textContent=hi.length?("Historical migration completed: "+hi.reduce(function(a,x){return a+(x.spending||0)+(x.ledger||0);},0)+" records across "+hi.length+" import"+(hi.length===1?"":"s")+". Historical rows do not change current account balances."):"No historical migration imported yet.";if(hr)hr.hidden=!hi.length;}
   S.cats.slice(0,4).forEach(function(c){
     var v=(c.quick&&c.quick[0])||500;
     var d=el("div",null,c.name+" "+(v/100).toFixed(2)+" → "+base+"?log="+c.id+"&amt="+v);
@@ -1378,8 +1413,16 @@ function openPdfAccountConfirm(name,rows){openSheet('<div class="pull"></div><b 
 function openPdfTextFallback(name,lines){openSheet('<div class="pull"></div><b style="font-size:17px">PDF needs a template</b><p class="hint">Text was extracted, but the generic parser could not confidently identify transactions. This usually means the bank uses a different table layout or the PDF is scanned.</p><div class="pdf-text-sample">'+esc((lines||[]).slice(0,18).join("\n"))+'</div><button class="flat" id="pdfClose">Close</button>');document.getElementById("pdfClose").onclick=shut;}
 
 
+function removeHistoricalImports(){
+  var created={};(S.historicalImports||[]).forEach(function(h){(h.createdAccounts||[]).forEach(function(id){created[id]=1;});});
+  S.txns=S.txns.filter(function(t){return t.source!=="historical_import";});
+  S.ledger=S.ledger.filter(function(x){return x.source!=="historical_import";});
+  S.accounts=S.accounts.filter(function(a){return !(a.source==="historical_import"&&created[a.id]);});
+  S.historicalImports=[];save();redraw();toast("Historical migration removed");
+}
 document.getElementById("historicalImport").addEventListener("click",function(){document.getElementById("historicalFile").click();});
 document.getElementById("historicalFile").addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var reader=new FileReader();reader.onload=function(){previewHistorical(String(reader.result||""),f.name);};reader.readAsText(f);this.value="";});
+var histRemove=document.getElementById("historicalRemove");if(histRemove)histRemove.addEventListener("click",function(){if(!confirm("Remove all historical-import records? Current manual data will be kept. Any account created only by the historical import will also be removed."))return;removeHistoricalImports();});
 document.getElementById("testCapture").addEventListener("click",function(){addCapture(parseNotificationText("Old Chang Kee, Singapore, SG\nSGD 4.90",{app:"DBS Bank"}));});
 document.getElementById("statementImport").addEventListener("click",function(){document.getElementById("statementFile").click();});
 document.getElementById("statementFile").addEventListener("change",function(){

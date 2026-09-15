@@ -175,6 +175,7 @@
       <p class="tiny dim" style="margin:0 0 11px">One-time import for your canonical history file. Budget Margin keeps the original source marker so migrated records can be distinguished from day-to-day entries.</p>
       <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
         <button class="sm" id="historicalImport">Import canonical CSV</button>
+        <button class="sm danger" id="historicalRemove" hidden>Remove imported history</button>
       </div>
       <input type="file" id="historicalFile" accept=".csv,text/csv" style="display:none">
       <div id="historicalStatus" class="tiny dim" style="margin-top:11px"></div>

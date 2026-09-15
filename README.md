@@ -1,4 +1,4 @@
-# Budget Margin 3.2
+# Budget Margin 3.2.1
 
 Local-first PWA for GitHub Pages. No server or API key is required.
 
@@ -31,3 +31,13 @@ Settings → Historical migration → Import canonical CSV. This is intended for
 ## GitHub Pages
 
 Publish the repository root from `main` via Settings → Pages. Keep all files in this folder at the repository root.
+
+
+## 3.2.1 migration correction
+
+- Historical migration no longer changes current account balances.
+- Loan accounts remain loans instead of being mapped as bank accounts.
+- Account cards display their native currency (SGD/MYR).
+- MYR accounts are converted only for aggregate SGD summary totals.
+- Loans are excluded from Liquid and treated separately from cash.
+- Imported-history cleanup is available in Setup.
