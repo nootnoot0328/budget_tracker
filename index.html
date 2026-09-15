@@ -14,7 +14,8 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="stylesheet" href="./styles.css">
-  <title>Budget Margin 3.2</title>
+  <link rel="stylesheet" href="./liquid-margin.css">
+  <title>Budget Margin 3.3</title>
 </head>
 <body>
 <main class="wrap">
@@ -25,17 +26,16 @@
   <section class="view on" id="v-spend">
     <div class="hero">
     <div class="segwrap"><span class="seg">
+      <button id="mDay" aria-pressed="false">Today</button>
       <button id="mWeek" aria-pressed="false">This week</button>
       <button id="mPeriod" aria-pressed="true">Whole period</button>
     </span></div>
-    <div class="gauge" id="gauge">
-      <svg viewBox="0 0 250 196" role="img" aria-labelledby="gT"><title id="gT">Budget remaining</title>
-        <circle class="ring" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="386.4 128.8"></circle>
-        <circle class="fill" id="gFill" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="0 515.2"></circle>
-      </svg>
-      <div class="face"><div class="amt tab" id="gAmt">—</div>
-        <div class="cap" id="gCap"></div><div class="pace" id="gPace"></div></div>
+    <div class="lm-vessel" id="gauge" role="img" aria-label="Budget remaining">
+      <div class="lm-fill" id="gFillLiquid"></div>
+      <div class="lm-face"><div><span class="lm-unit">S$</span><span class="lm-amt tab" id="gAmt">0</span></div>
+        <div class="lm-cap" id="gCap"></div><div class="lm-pace" id="gPace"></div></div>
     </div>
+    <div class="lm-spent-cap"><span id="lmSpentText">Spent —</span><span id="lmCapText">Cap —</span></div>
     <div class="herofoot hero-metrics">
       <div><span class="metriclabel">Safe today</span><b class="tab" id="safeToday">—</b></div>
       <span class="divider"></span>
@@ -67,18 +67,19 @@
   <section class="view" id="v-plan">
     <div class="viewtitle">Plan</div><div class="viewsub">Your cash, commitments, goals and next moves in one place.</div>
 
-    <div class="plan-forecast hero">
+    <div class="plan-forecast hero lm-plan-hero">
       <div class="plan-forecast-head"><span>This budget period</span><b id="planPeriodLabel">—</b></div>
-      <div class="plan-free"><span>Free margin</span><b class="tab" id="planFree">—</b></div>
-      <div class="plan-grid">
+      <div class="lm-tank" id="planFreeTank">
+        <div class="lm-tank-fill"></div>
+        <div class="lm-tank-face"><span class="metriclabel">FREE MARGIN</span><b class="tab lm-free-value" id="planFree">—</b></div>
+      </div>
+      <div class="plan-grid lm-plan-grid">
         <div><span>Envelope left</span><b class="tab" id="planEnvelopeLeft">—</b></div>
         <div><span>Reserved bills</span><b class="tab" id="planReserved">—</b></div>
-        <div><span>Expected income</span><b class="tab" id="planIncome">—</b></div>
+        <div><span>Expected in</span><b class="tab" id="planIncome">—</b></div>
       </div>
       <p class="plan-note">Expected income is shown for planning, but is not counted in Safe today until it actually arrives.</p>
     </div>
-
-
 
     <div class="sectionhead"><h2>30-day forecast</h2><span id="forecastSummary">planned cash flow</span></div>
     <div class="forecast-list" id="forecastList"></div>
@@ -101,15 +102,22 @@
     <div class="sectionhead recurring-head"><h2>Recurring schedules</h2><span id="recurringCount">0 active</span></div>
     <div class="schedule-list" id="scheduleList"></div>
 
-    <div class="sectionhead debt-head"><h2>Debt payoff</h2><span>tap a balance to update</span></div>
-    <div class="debt-mini hero"><div class="gauge" id="dGauge">
-      <svg viewBox="0 0 250 196" role="img" aria-labelledby="dT"><title id="dT">Debt cleared</title>
-        <circle class="ring" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="386.4 128.8"></circle>
-        <circle class="fill" id="dFill" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="0 515.2"></circle>
-      </svg>
-      <div class="face"><div class="amt tab" id="dAmt">—</div>
-        <div class="cap" id="dCap"></div><div class="pace" id="dPace"></div></div>
-    </div></div>
+    <div class="sectionhead debt-head"><h2>Debt payoff</h2><span>forecast + balances</span></div>
+    <div class="debt-plan hero" id="debtPlanCard">
+      <div class="debt-plan-controls">
+        <label><span>Strategy</span><select id="debtStrategy"><option value="avalanche">Avalanche · highest APR first</option><option value="snowball">Snowball · smallest balance first</option></select></label>
+        <label><span>Total debt budget / month</span><input id="debtMonthlyBudget" inputmode="decimal" placeholder="e.g. 1200"></label>
+      </div>
+      <div class="debt-plan-summary" id="debtPlanSummary"></div>
+      <div class="debt-timeline" id="debtTimeline"></div>
+      <p class="tiny dim" style="margin:10px 0 0">Forecast assumes monthly interest at APR ÷ 12, pays each debt's minimum, then rolls the remaining monthly budget into the selected target. It is a planning estimate, not a lender payoff quote.</p>
+    </div><div class="sectionhead debt-head"><h2>Debt balances</h2><span>tap a balance to update</span></div>
+    <div class="debt-mini hero lm-debt-card">
+      <div class="lm-tank lm-debt-tank" id="dGauge">
+        <div class="lm-tank-fill" id="dFillLiquid"></div>
+        <div class="lm-tank-face"><span><b class="tab lm-debt-value" id="dAmt">—</b><small id="dCap">still owed</small></span><span class="lm-debt-cleared" id="dPace">—</span></div>
+      </div>
+    </div>
     <div class="list" id="dList"></div>
     <div class="flex" style="gap:8px;margin-top:14px">
       <input id="newDebt" placeholder="Name another debt" autocomplete="off">
@@ -128,6 +136,7 @@
       <button data-hview="list" aria-pressed="true">List</button>
       <button data-hview="calendar" aria-pressed="false">Calendar</button>
       <button data-hview="stats" aria-pressed="false">Insights</button>
+      <button data-hview="analytics" aria-pressed="false">Analytics</button>
     </div>
     <div id="historyListView">
       <div class="history-tools">
@@ -150,6 +159,9 @@
     <div id="historyStatsView" class="history-alt" hidden>
       <div id="statsBody"></div>
     </div>
+    <div id="historyAnalyticsView" class="history-alt" hidden>
+      <div id="analyticsBody"></div>
+    </div>
   </section>
 
   <section class="view" id="v-setup">
@@ -158,6 +170,7 @@
     <div class="block">
       <div class="field"><label for="sStart">Budget resets on day</label><select id="sStart"></select></div>
       <div class="field"><label for="sRate">Ringgit per Singapore dollar</label><input id="sRate" type="text" inputmode="decimal"></div>
+      <div class="field"><label for="sDailyCap">Daily spending limit <span class="dim">(optional)</span></label><input id="sDailyCap" type="text" inputmode="decimal" placeholder="Auto from period budget"><div class="hint">If blank, Today uses a prorated share of your period budget. Set this only if you want a hard daily ceiling.</div></div>
     </div>
 
     <h2>Envelopes</h2>
@@ -227,7 +240,7 @@
       </div>
     </div>
 
-    <h2>App and offline <span class="versiontag">3.2</span></h2>
+    <h2>App and offline <span class="versiontag">3.4</span></h2>
     <div class="block">
       <div class="pwa-state" id="pwaState"><span class="pwa-dot"></span><div><b id="pwaTitle">Browser mode</b><div class="tiny dim" id="pwaText">Publish on GitHub Pages, then add Budget Margin to your Home Screen.</div></div></div>
       <div class="app-update-row">
@@ -266,6 +279,7 @@
 
 <div class="sheet" id="sheet"><div id="sheetBody"></div></div>
 <div id="toast"><span id="tMsg"></span><button id="undo" style="display:none">Undo</button></div>
+<script src="./liquid-margin.js" defer></script>
 <script src="./app.js" defer></script>
 </body>
 </html>

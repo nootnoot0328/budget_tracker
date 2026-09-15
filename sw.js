@@ -1,8 +1,10 @@
-const CACHE = "budget-margin-shell-v321";
+const CACHE = "budget-margin-shell-v34-liquid";
 const SHELL = [
   "./",
   "./index.html",
   "./styles.css",
+  "./liquid-margin.css",
+  "./liquid-margin.js",
   "./app.js",
   "./manifest.webmanifest",
   "./icon-180.png",

@@ -1,0 +1,119 @@
+/* Liquid Margin — drop-in layer for Budget Margin 3.3+
+   Append after styles.css. Uses the app's existing tokens:
+   --accent --sig --ground --panel --raised --line --line-strong --ivory --dim --faint
+   --jade --cyan --violet --amber --coral --spring
+   Nothing here overrides existing rules; every class is lm-* prefixed. */
+
+@keyframes lm-swell   { from { transform: translateX(0) }   to { transform: translateX(-50%) } }
+@keyframes lm-swell-y { from { transform: translateY(0) }   to { transform: translateY(-50%) } }
+@keyframes lm-draw    { from { stroke-dashoffset: 900 }     to { stroke-dashoffset: 0 } }
+@keyframes lm-rise    { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+@keyframes lm-pop     { 0% { transform: scale(.93); opacity: .5 } 62% { transform: scale(1.03) } 100% { transform: none; opacity: 1 } }
+@keyframes lm-bar     { from { transform: scaleY(.04) } to { transform: scaleY(1) } }
+
+/* ── vessel: round gauge replacement (Spend hero) ───────────── */
+.lm-vessel{position:relative;width:236px;height:236px;margin:0 auto;border-radius:50%;overflow:hidden;
+  border:1px solid var(--line);background:rgba(4,16,21,.55);box-shadow:inset 0 0 44px rgba(0,0,0,.5)}
+.lm-fill{position:absolute;left:0;right:0;bottom:0;height:0;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 42%,transparent),color-mix(in srgb,var(--accent) 14%,transparent));
+  transition:height .9s var(--spring,cubic-bezier(.22,.92,.28,1.08))}
+/* wave surfaces: two offset sine layers riding the fill's top edge */
+.lm-wave{position:absolute;left:0;width:200%;animation:lm-swell 5s linear infinite}
+.lm-wave--back{top:-9px;height:22px;animation-duration:8s;animation-direction:reverse}
+.lm-wave--front{top:-13px;height:26px}
+.lm-face{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  pointer-events:none;text-align:center}
+.lm-face .lm-unit{font-size:15px;color:var(--dim);font-weight:600}
+.lm-face .lm-amt{font-size:52px;font-weight:700;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums}
+.lm-face .lm-cap{font-size:12.5px;color:var(--dim);margin-top:8px}
+.lm-face .lm-pace{font-size:12px;color:var(--faint);margin-top:2px}
+
+/* ── tank: horizontal meter (free margin, storage) ──────────── */
+.lm-tank{position:relative;height:132px;border-radius:24px;overflow:hidden;border:1px solid var(--line);background:rgba(4,16,21,.55)}
+.lm-tank--sm{height:74px;border-radius:16px}
+.lm-tank-fill{position:absolute;left:0;top:0;bottom:0;width:0;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 42%,transparent),color-mix(in srgb,var(--accent) 14%,transparent));
+  transition:width .9s var(--spring,cubic-bezier(.22,.92,.28,1.08))}
+.lm-wave-y{position:absolute;right:-11px;top:0;width:24px;height:200%;animation:lm-swell-y 6s linear infinite}
+.lm-tank-face{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;padding:18px 20px;pointer-events:none}
+.lm-tank--sm .lm-tank-face{flex-direction:row;align-items:center;justify-content:space-between;padding:0 16px}
+
+/* ── goal vessel (Plan) ─────────────────────────────────────── */
+.lm-goal{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px;
+  border:1px solid var(--line);border-radius:18px;background:linear-gradient(160deg,rgba(15,37,49,.88),rgba(12,27,34,.88));cursor:pointer}
+.lm-goal:active{transform:scale(.98)}
+.lm-goal-vessel{position:relative;width:42px;height:66px;border-radius:13px;overflow:hidden;flex:none;
+  border:1px solid var(--line-strong);background:rgba(4,16,21,.6)}
+.lm-goal-vessel .lm-fill{transition:height .8s var(--spring,cubic-bezier(.22,.92,.28,1.08))}
+.lm-goal-vessel .lm-wave{top:-7px;height:14px;animation-duration:4.5s}
+
+/* ── liquid calendar (History) ──────────────────────────────── */
+.lm-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.lm-cal-day{position:relative;height:62px;border-radius:13px;overflow:hidden;border:1px solid var(--line);
+  background:rgba(4,16,21,.5);padding:0;animation:lm-rise .5s cubic-bezier(.2,.8,.2,1) both;transition:border-color .2s}
+.lm-cal-day[aria-pressed="true"]{border-color:var(--accent)}
+.lm-cal-day .lm-fill{transition:height .7s var(--spring,cubic-bezier(.22,.92,.28,1.08))}
+.lm-cal-num{position:absolute;left:7px;top:6px;font-size:10.5px;font-weight:750;color:var(--dim)}
+.lm-cal-day[aria-pressed="true"] .lm-cal-num{color:var(--ivory)}
+.lm-cal-amt{position:absolute;right:7px;bottom:6px;font-size:9px;font-weight:700;opacity:.82;font-variant-numeric:tabular-nums}
+
+/* ── analytics: donut + line ────────────────────────────────── */
+.lm-donut-wrap{display:grid;grid-template-columns:158px 1fr;align-items:center;gap:14px}
+.lm-donut{width:158px;height:158px;overflow:visible}
+.lm-slice{cursor:pointer;transition:opacity .25s,stroke-width .25s}
+.lm-slice[data-muted="true"]{opacity:.3}
+.lm-chart{width:100%;height:186px;overflow:visible}
+.lm-grid-line{stroke:var(--line);stroke-width:.8}
+.lm-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:900;
+  animation:lm-draw 1.1s cubic-bezier(.2,.8,.2,1) both}
+.lm-line--spend{stroke:var(--amber)}
+.lm-line--save{stroke:var(--jade);animation-delay:.15s}
+.lm-point{stroke:var(--panel);stroke-width:2;transition:r .2s}
+.lm-tip{margin-top:8px;padding:9px 11px;border-radius:12px;background:var(--raised);border:1px solid var(--line)}
+.lm-tip b{display:block;font-size:11px}
+.lm-tip span{display:block;font-size:10.5px;color:var(--dim);margin-top:2px}
+
+/* ── switches (Settings) ────────────────────────────────────── */
+.lm-switch{width:50px;height:29px;border-radius:999px;flex:none;display:flex;align-items:center;padding:3px;
+  background:rgba(123,171,183,.18);transition:background .28s}
+.lm-switch i{width:23px;height:23px;border-radius:50%;background:var(--ivory);display:block;
+  transition:transform .28s var(--spring,cubic-bezier(.22,.92,.28,1.08))}
+[aria-checked="true"] .lm-switch{background:color-mix(in srgb,var(--accent) 55%,transparent)}
+[aria-checked="true"] .lm-switch i{transform:translateX(21px)}
+
+/* ── misc motion ────────────────────────────────────────────── */
+.lm-pop{animation:lm-pop .3s var(--spring,cubic-bezier(.22,.92,.28,1.08)) both}
+.lm-rise{animation:lm-rise .4s cubic-bezier(.2,.8,.2,1) both}
+.lm-hold{position:relative;width:176px;height:176px;border-radius:50%;border:none;padding:0;display:grid;place-items:center;
+  touch-action:none;cursor:pointer;background:conic-gradient(var(--violet) 0%,rgba(123,171,183,.14) 0);
+  transition:transform .2s var(--spring,cubic-bezier(.22,.92,.28,1.08))}
+.lm-hold[data-holding="true"]{transform:scale(1.04)}
+.lm-hold-face{width:150px;height:150px;border-radius:50%;background:#0A1C23;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px}
+
+/* horizontal snap scroller (envelope carousel) — needs vertical room for the lift */
+.lm-hscroll{display:grid;grid-auto-flow:column;grid-auto-columns:172px;gap:10px;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;scroll-snap-type:x mandatory;padding:14px 2px 16px}
+.lm-hscroll::-webkit-scrollbar{display:none}
+.lm-hscroll > *{scroll-snap-align:center;transition:transform .3s var(--spring,cubic-bezier(.22,.92,.28,1.08)),border-color .25s}
+.lm-hscroll > [aria-pressed="true"]{transform:translateY(-7px) scale(1.015)}
+
+@media (prefers-reduced-motion:reduce){
+  .lm-wave,.lm-wave-y{display:none}
+  .lm-fill,.lm-tank-fill,.lm-line,.lm-cal-day,.lm-pop,.lm-rise{animation:none!important;transition:none!important}
+}
+
+
+/* Budget Margin integration */
+.lm-spent-cap{display:flex;justify-content:space-between;color:var(--faint);font-size:12px;margin:5px 8px 8px}
+.lm-envelope-row{border:1px solid var(--line);border-radius:18px!important;background:linear-gradient(160deg,rgba(15,37,49,.88),rgba(12,27,34,.88))!important;padding:14px!important;margin-bottom:0!important}
+.lm-envelope-row .rule{height:6px;background:rgba(3,15,20,.75);position:relative}.lm-envelope-row .rule i{position:relative;overflow:hidden}
+.lm-sheen{position:absolute;inset:0 auto 0 0;width:40%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);animation:lm-sheen 2.6s ease-in-out infinite}
+@keyframes lm-sheen{from{transform:translateX(-120%)}to{transform:translateX(350%)}}
+.lm-quick-row{display:flex;gap:7px;padding:8px 4px 12px}.lm-quick-pill{flex:1;background:#102832;border:1px solid var(--line-strong);border-radius:999px;padding:9px 4px;font-size:12.5px;font-weight:700}
+.lm-plan-hero{display:flex;flex-direction:column;gap:10px}.lm-plan-grid{margin-top:0}.lm-free-value{font-size:32px!important;letter-spacing:-.04em}.lm-goal-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.lm-goal-card{position:relative}.lm-goal{min-height:92px}.lm-goal-copy{min-width:0}.lm-goal-copy b,.lm-goal-copy span,.lm-goal-copy small{display:block}.lm-goal-copy span{font-size:15px;font-weight:750;margin-top:4px}.lm-goal-copy small{font-size:10px;color:var(--faint);margin-top:2px}.lm-goal-add{width:100%;margin-top:5px;border:1px solid var(--line);background:var(--raised);border-radius:11px;padding:7px;font-size:11px;color:var(--dim)}
+.lm-debt-tank{height:88px;background:rgba(4,16,21,.6)}.lm-debt-tank .lm-tank-fill{background:linear-gradient(90deg,rgba(163,139,255,.5),rgba(163,139,255,.18))}.lm-debt-value{font-size:23px}.lm-debt-tank small{display:block;color:var(--dim);font-size:10px;margin-top:2px}.lm-debt-cleared{font-size:11px;color:var(--dim)}
+#historyCalendarView .calendar-weekdays{margin-bottom:6px}.lm-cal-day{color:var(--ivory)}.lm-cal-day .lm-fill{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 42%,transparent),color-mix(in srgb,var(--accent) 14%,transparent))}
+.lm-analytics-card{border:1px solid var(--line);border-radius:20px;background:linear-gradient(160deg,rgba(15,37,49,.88),rgba(12,27,34,.88));padding:15px;margin:12px 0}.lm-donut-stage{position:relative;width:158px;height:158px}.lm-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center}.lm-donut-center span{font-size:9px;color:var(--faint);letter-spacing:.08em}.lm-donut-center b{font-size:17px;margin-top:3px}.lm-legend{display:flex;flex-direction:column;gap:3px}.lm-legend-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:8px;padding:6px 3px;text-align:left;font-size:11px;transition:opacity .25s}.lm-legend-row i{width:8px;height:8px;border-radius:50%}.lm-legend-row b{font-size:10.5px;color:var(--dim)}
+.history-view-tabs{width:100%;display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:13px}.history-view-tabs button{padding-left:4px;padding-right:4px}
+@media(max-width:380px){.lm-vessel{width:218px;height:218px}.lm-goal-grid{grid-template-columns:1fr}.lm-donut-wrap{grid-template-columns:1fr}.lm-donut-stage{margin:auto}.history-view-tabs button{font-size:11px}}
