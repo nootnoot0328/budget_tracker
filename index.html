@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Margin">
+  <meta name="theme-color" content="#08171F">
+  <meta name="description" content="Margin — a private, local-first envelope budget and debt tracker.">
+  <meta name="application-name" content="Margin">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Margin — Budget with intent</title>
+</head>
+<body>
+<main class="wrap">
+  <header class="apphead">
+    <div class="brand"><span class="brandmark"><svg viewBox="0 0 24 24"><path d="M5 16.5 9.5 12l3 3L19 8.5"/><path d="M15.5 8.5H19V12"/></svg></span><span>Margin</span></div>
+    <span class="periodpill">Spend with intent</span>
+  </header>
+
+  <section class="view on" id="v-spend">
+    <div class="hero">
+    <div class="segwrap"><span class="seg">
+      <button id="mWeek" aria-pressed="false">This week</button>
+      <button id="mPeriod" aria-pressed="true">Whole period</button>
+    </span></div>
+    <div class="gauge" id="gauge">
+      <svg viewBox="0 0 250 196" role="img" aria-labelledby="gT"><title id="gT">Budget remaining</title>
+        <circle class="ring" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="386.4 128.8"></circle>
+        <circle class="fill" id="gFill" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="0 515.2"></circle>
+      </svg>
+      <div class="face"><div class="amt tab" id="gAmt">—</div>
+        <div class="cap" id="gCap"></div><div class="pace" id="gPace"></div></div>
+    </div>
+    <div class="herofoot hero-metrics">
+      <div><span class="metriclabel">Safe today</span><b class="tab" id="safeToday">—</b></div>
+      <span class="divider"></span>
+      <div><span class="metriclabel">Spent</span><b class="tab" id="periodSpent">—</b></div>
+      <span class="divider"></span>
+      <div><span class="metriclabel">Reset</span><b id="daysReset">—</b></div>
+    </div>
+    <div class="pacecompare">
+      <div class="pace-track"><i id="paceActual"></i><span id="paceMarker"></span></div>
+      <div class="pace-caption"><span id="paceStatus">Set your envelope caps to start.</span><span id="pacePercent" class="tab"></span></div>
+    </div>
+    </div>
+    <div id="recBox" style="margin-top:14px"></div>
+    <div class="sectionhead"><h2>Envelopes</h2><span>remaining</span></div>
+    <div class="reorder-tip"><svg viewBox="0 0 12 16"><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>Hold the grip and drag to reorder</div>
+    <div class="list" id="list"></div>
+    <div class="sectionhead recent-head">
+      <h2>Recent</h2>
+      <button class="textlink" id="seeHistory">See all</button>
+    </div>
+    <div id="recentList" class="recent-list"></div>
+  </section>
+
+  <section class="view" id="v-debt">
+    <div class="viewtitle">Debt payoff</div><div class="viewsub">Every payment buys back future cash flow.</div>
+    <div class="hero"><div class="gauge" id="dGauge">
+      <svg viewBox="0 0 250 196" role="img" aria-labelledby="dT"><title id="dT">Debt cleared</title>
+        <circle class="ring" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="386.4 128.8"></circle>
+        <circle class="fill" id="dFill" cx="125" cy="110" r="82" transform="rotate(135 125 110)" stroke-dasharray="0 515.2"></circle>
+      </svg>
+      <div class="face"><div class="amt tab" id="dAmt">—</div>
+        <div class="cap" id="dCap"></div><div class="pace" id="dPace"></div></div>
+    </div></div>
+    <div class="sectionhead"><h2>Balances</h2><span>tap to update</span></div>
+    <div class="list" id="dList"></div>
+    <div class="flex" style="gap:8px;margin-top:14px">
+      <input id="newDebt" placeholder="Name another debt" autocomplete="off">
+      <button class="sm" id="addDebt" style="white-space:nowrap">Add</button>
+    </div>
+    <p class="tiny dim" style="margin-top:12px">Tap a debt to record a payment. The arc fills as you clear it.</p>
+  </section>
+
+  <section class="view" id="v-history">
+    <div class="viewtitle">History</div><div class="viewsub">A clean trail of where the money actually went.</div>
+    <div class="flex" style="margin-bottom:4px">
+      <button class="sm" id="hPrev" aria-label="Previous period">‹</button>
+      <span id="hLabel" style="font-weight:600"></span>
+      <button class="sm" id="hNext" aria-label="Next period">›</button>
+    </div>
+    <div class="history-tools">
+      <label class="searchbox" aria-label="Search history">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+        <input id="hSearch" type="search" placeholder="Search notes or envelopes" autocomplete="off">
+      </label>
+      <select id="hCatFilter" aria-label="Filter history by envelope"><option value="">All envelopes</option></select>
+    </div>
+    <div class="history-summary" id="hSummary"></div>
+    <div class="hint">Tap to edit. Swipe left to repeat or delete.</div>
+    <div id="hBody"></div>
+  </section>
+
+  <section class="view" id="v-setup">
+    <div class="viewtitle">Settings</div><div class="viewsub">Tune Margin to match the way you actually spend.</div>
+    <h2>Period and currency</h2>
+    <div class="block">
+      <div class="field"><label for="sStart">Budget resets on day</label><select id="sStart"></select></div>
+      <div class="field"><label for="sRate">Ringgit per Singapore dollar</label><input id="sRate" type="text" inputmode="decimal"></div>
+    </div>
+
+    <h2>Envelopes</h2>
+    <div id="editor"></div>
+    <div class="flex" style="gap:8px;margin-top:10px">
+      <input id="newCat" placeholder="Name a new envelope" autocomplete="off">
+      <button class="sm" id="addCat" style="white-space:nowrap">Add</button>
+    </div>
+    <div class="block" style="margin-top:12px">
+      <div class="flex"><span class="dim">Total each period</span><b class="tab" id="capTotal">—</b></div>
+    </div>
+
+    <h2>Check against your bank</h2>
+    <div class="block">
+      <p class="tiny dim" style="margin:0 0 11px">Compare what you logged with what your accounts actually show. The gap is what you are missing.</p>
+      <button class="sm" id="recNow">Check last period</button>
+      <div id="recHist" class="tiny dim" style="margin-top:11px"></div>
+    </div>
+
+    <h2>One tap from your home screen</h2>
+    <div class="block">
+      <p class="tiny dim" style="margin:0 0 9px">Make an iOS Shortcut that opens a web page, paste a link below, and add it to your home screen. Tapping it logs the amount straight away.</p>
+      <div id="shortcuts" class="tiny"></div>
+    </div>
+
+    <h2>Appearance</h2>
+    <div class="block">
+      <div class="setting-row">
+        <div><b>Accent</b><div class="tiny dim">Affects controls and highlights, not your budget warning colours.</div></div>
+      </div>
+      <div class="accent-grid" id="accentGrid" role="radiogroup" aria-label="Accent colour">
+        <button class="accent-dot" data-accent="jade" aria-label="Jade" title="Jade"></button>
+        <button class="accent-dot" data-accent="cyan" aria-label="Cyan" title="Cyan"></button>
+        <button class="accent-dot" data-accent="violet" aria-label="Violet" title="Violet"></button>
+        <button class="accent-dot" data-accent="amber" aria-label="Amber" title="Amber"></button>
+        <button class="accent-dot" data-accent="pink" aria-label="Pink" title="Pink"></button>
+      </div>
+    </div>
+
+    <h2>App and offline <span class="versiontag">1.6</span></h2>
+    <div class="block">
+      <div class="pwa-state" id="pwaState"><span class="pwa-dot"></span><div><b id="pwaTitle">Browser mode</b><div class="tiny dim" id="pwaText">Publish on GitHub Pages, then add Margin to your Home Screen.</div></div></div>
+      <div class="app-update-row">
+        <span class="tiny dim" id="updateText">Updates are checked when Margin opens.</span>
+        <button class="sm" id="checkUpdate">Check now</button>
+      </div>
+    </div>
+
+    <h2>Backup</h2>
+    <div id="warnBox"></div>
+    <div class="block">
+      <p class="tiny dim" style="margin:0 0 11px">Your budget data stays on this device. App updates do not upload it anywhere — keep backups anyway.</p>
+      <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
+        <button class="sm" id="expJson">Export backup</button>
+        <button class="sm" id="expCsv">Export CSV</button>
+        <button class="sm" id="impBtn">Restore</button>
+        <button class="sm" id="recoverPrev">Recover previous</button>
+      </div>
+      <input type="file" id="impFile" accept=".json,application/json" style="display:none">
+      <p class="tiny dim" id="lastExp" style="margin:11px 0 0"></p>
+    </div>
+
+    <h2>Start over</h2>
+    <div class="block"><button class="sm danger" id="wipe">Erase everything</button></div>
+    <p class="tiny dim" style="text-align:center;margin:20px 0 6px" id="cnt"></p>
+  </section>
+</main>
+
+<nav class="nav">
+  <span class="nav-indicator" id="navIndicator" aria-hidden="true"></span>
+  <button data-go="spend" aria-current="true"><svg viewBox="0 0 24 24"><path d="M12 20a8 8 0 1 0-8-8"/><path d="M12 7v5l3 2"/></svg>Spend</button>
+  <button data-go="debt"><svg viewBox="0 0 24 24"><path d="M4 18 10 12l3.5 3.5L20 8"/><path d="M15 8h5v5"/></svg>Debt</button>
+  <button data-go="history"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h9"/></svg>History</button>
+  <button data-go="setup"><svg viewBox="0 0 24 24"><path d="M5 8h14M5 16h14"/><circle cx="9" cy="8" r="2.2"/><circle cx="15" cy="16" r="2.2"/></svg>Setup</button>
+</nav>
+
+<div class="sheet" id="sheet"><div id="sheetBody"></div></div>
+<div id="toast"><span id="tMsg"></span><button id="undo" style="display:none">Undo</button></div>
+<script src="./app.js" defer></script>
+</body>
+</html>
