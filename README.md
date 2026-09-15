@@ -1,47 +1,25 @@
-# Margin 1.6 — GitHub Pages build
+# Budget Margin 2.1
 
-Margin 1.6 is a static, local-first personal budgeting PWA. Upload **all files in this folder** to the root of one GitHub repository.
+A private, local-first budgeting PWA designed for GitHub Pages and iPhone Home Screen use.
 
-## Publish on GitHub Pages
+## 2.1 highlights
 
-1. Create a repository and upload every file in this folder.
-2. Open **Settings → Pages**.
-3. Under **Build and deployment**, choose **Deploy from a branch**.
-4. Select your `main` branch and `/ (root)`, then save.
-5. Open the HTTPS Pages URL in Safari on iPhone.
-6. Use **Share → Add to Home Screen**.
+- App renamed to **Budget Margin**
+- **Plan** tab combines accounts, recurring commitments and debt payoff
+- Manual account snapshots with Bank / Cash / Credit Card types
+- Spending can be tagged to an account
+- Recurring income and expenses: weekly, monthly or yearly
+- Upcoming expenses can be reserved from **Safe today**
+- Recurring expenses can be linked to an envelope and logged from the Upcoming list
+- History can be filtered by envelope and account
+- Existing Margin 2.0 data migrates in place using the same local storage key
 
-Keep the same repository / Pages URL for future releases so the browser origin stays the same and your on-device Margin storage continues to be available.
+## Deploy
 
-## Files
+Upload the files in this folder to the root of your GitHub repository and enable **Settings → Pages → Deploy from a branch → main → /(root)**.
 
-- `index.html` — app structure only
-- `styles.css` — visual system, motion, drag/swipe states and responsive layout
-- `app.js` — budget, debt, history, gestures, backup and PWA behaviour
-- `sw.js` — offline shell and update lifecycle
-- `manifest.webmanifest` — Home Screen / PWA metadata
-- `icon-*.png` — app icons
-
-## New in 1.6
-
-- Refactored out of the old single-file prototype into separate HTML, CSS and JavaScript.
-- Home card now shows **Safe today**, amount spent, days to reset and actual-vs-ideal spending pace.
-- Envelope cards show spent and budget amounts in addition to remaining balance.
-- Recent activity appears on the Spend screen and opens directly into editing.
-- History now supports live search and envelope filtering, with a filtered total.
-- User-selectable UI accent colours; overspend warning colours remain independent.
-- App update detection and a **Check now / Update** control in Settings.
-- One-step local recovery snapshot (`margin.v2.prev`) before normal state changes.
-- Existing drag-to-reorder envelopes, swipe actions, draggable sheets and motion are retained.
+Keep the same Pages URL when upgrading so the browser can continue using the same local data. Export a backup before any major update.
 
 ## Privacy
 
-The repository contains app code only. It intentionally contains **no personal balances, debts, transactions or budget caps**.
-
-Your live data is stored in browser storage under `margin.v2`. Do **not** commit exported Margin JSON backups to GitHub. A public repository and its GitHub Pages site can be read by other people.
-
-## Updating Margin later
-
-Replace the app files in the same repository. When the service worker detects a new version, Settings will show that an update is ready. Applying the update refreshes the app shell; it does not intentionally clear `margin.v2`.
-
-Still export a backup periodically. Clearing Safari website data, changing to another repository/domain, browser storage eviction, or losing the device can remove local data.
+No personal balances are hard-coded into this repository. Your live data is stored locally in the browser on your device. Never commit an exported backup JSON to a public repository.

@@ -1,4 +1,4 @@
-const CACHE = "margin-shell-v16";
+const CACHE = "budget-margin-shell-v21";
 const SHELL = [
   "./",
   "./index.html",
@@ -17,7 +17,7 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE && (key.startsWith("budget-margin-shell-") || key.startsWith("margin-shell-"))).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });

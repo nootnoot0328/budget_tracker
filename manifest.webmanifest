@@ -1,7 +1,7 @@
 {
-  "name": "Margin",
-  "short_name": "Margin",
-  "description": "Private, local-first envelope budgeting, debt tracking, and spending pace guidance.",
+  "name": "Budget Margin",
+  "short_name": "Budget Margin",
+  "description": "Local-first envelope budgeting with accounts, recurring commitments, debt and spending insights.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
