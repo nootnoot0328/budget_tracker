@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./liquid-margin.css">
-  <title>Budget Margin 3.3</title>
+  <title>Budget Margin 3.6</title>
 </head>
 <body>
 <main class="wrap">
@@ -25,11 +25,11 @@
 
   <section class="view on" id="v-spend">
     <div class="hero">
-    <div class="segwrap"><span class="seg">
+    <div class="spend-topbar"><div class="segwrap"><span class="seg">
       <button id="mDay" aria-pressed="false">Today</button>
       <button id="mWeek" aria-pressed="false">This week</button>
       <button id="mPeriod" aria-pressed="true">Whole period</button>
-    </span></div>
+    </span></div><button class="home-log-btn" id="homeLog" type="button">+ Log</button></div>
     <div class="lm-vessel" id="gauge" role="img" aria-label="Budget remaining">
       <div class="lm-fill" id="gFillLiquid"></div>
       <div class="lm-face"><div><span class="lm-unit">S$</span><span class="lm-amt tab" id="gAmt">0</span></div>
@@ -50,7 +50,7 @@
     <button class="commitment-note" id="commitmentNote" type="button" hidden></button>
     </div>
     <div id="recBox" style="margin-top:14px"></div>
-    <div class="sectionhead capture-head"><h2>Capture inbox</h2><span id="captureCount">0 waiting</span></div>
+    <div class="sectionhead capture-head"><h2>Capture inbox</h2><div class="capture-actions"><span id="captureCount">0 waiting</span><button class="textlink" id="pasteCapture" type="button">Paste payment</button></div></div>
     <div id="captureInbox" class="capture-inbox"></div>
     <div class="sectionhead quick-head"><h2>Quick log</h2><span id="quickLogHint">saved favourites</span></div>
     <div id="quickLogs" class="quick-logs"></div>
@@ -148,6 +148,7 @@
         <select id="hAccountFilter" aria-label="Filter history by account"><option value="">All accounts</option></select>
       </div>
       <div class="history-summary" id="hSummary"></div>
+      <div class="history-add-row"><button class="sm" id="addPastTxn" type="button">+ Add past entry</button></div>
       <div class="hint">Tap to edit. Swipe left to repeat or delete.</div>
       <div id="hBody"></div>
     </div>
@@ -174,6 +175,7 @@
     </div>
 
     <h2>Envelopes</h2>
+    <p class="tiny dim" style="margin:-4px 0 10px">Rename an envelope here and every past log under it updates automatically. Use Merge when two envelopes should become one. Choose which envelopes appear on the Spend home.</p>
     <div id="editor"></div>
     <div class="flex" style="gap:8px;margin-top:10px">
       <input id="newCat" placeholder="Name a new envelope" autocomplete="off">
@@ -208,7 +210,7 @@
 
     <h2>iPhone capture bridge</h2>
     <div class="block">
-      <p class="tiny dim" style="margin:0 0 9px">For iOS 27 notification automations, have Shortcuts open Budget Margin with the notification text in the URL fragment. The fragment is processed on-device and is not sent to GitHub Pages.</p>
+      <p class="tiny dim" style="margin:0 0 9px">Recommended iOS 27 flow: Shortcut copies the bank notification to the clipboard. Open Budget Margin from your Home Screen, then tap <b>Paste payment</b>. Budget Margin reads the clipboard directly, parses the payment and opens a prefilled confirmation sheet — no text box required. URL capture remains available as a fallback.</p>
       <div id="captureLink" class="capture-link tiny"></div>
       <button class="sm" id="testCapture" style="margin-top:10px">Test capture</button>
     </div>

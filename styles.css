@@ -460,3 +460,25 @@
 .debt-timeline-track{height:6px;background:var(--ground);border-radius:999px;overflow:hidden}
 .debt-timeline-track i{display:block;height:100%;background:var(--violet);border-radius:inherit;transition:width .4s cubic-bezier(.2,.9,.3,1)}
 @media(max-width:420px){.debt-plan-controls{grid-template-columns:1fr}.debt-plan-summary{grid-template-columns:1fr 1fr}.debt-timeline-row{grid-template-columns:60px 1fr 68px}}
+
+/* 3.5 capture / envelope management */
+.capture-actions{display:flex;align-items:center;gap:10px}.capture-actions .textlink{font-size:11px}
+.merge-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin:2px 0 10px}.merge-row select{min-width:0}
+.history-summary{gap:10px;flex-wrap:wrap}.history-summary #addPastTxn{margin-left:auto}
+.history-add-row{display:flex;justify-content:flex-end;margin:8px 0 4px}
+
+/* ── Budget Margin 3.6: manual log + page swipe polish ───────── */
+html,body{max-width:100%;overflow-x:hidden;overscroll-behavior-x:none}
+.wrap,.view{max-width:100%;min-width:0}
+#v-spend{overflow-x:clip}
+.spend-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative;z-index:3}
+.spend-topbar .segwrap{margin:4px 0 0;padding-left:4px;min-width:0}
+.home-log-btn{flex:none;margin-top:4px;padding:8px 13px;border-radius:999px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 72%,white));color:#061c16;font-size:12px;font-weight:800;box-shadow:0 8px 20px color-mix(in srgb,var(--accent) 18%,transparent);transition:transform .16s var(--spring),filter .2s}
+.home-log-btn:active{transform:scale(.95)}
+.quick-logs,.lm-hscroll{overscroll-behavior-x:contain}
+
+.view.swipe-in-next{animation:bmSwipeNext .25s var(--ease-out) both}
+.view.swipe-in-prev{animation:bmSwipePrev .25s var(--ease-out) both}
+@keyframes bmSwipeNext{from{opacity:.45;transform:translateX(20px)}to{opacity:1;transform:none}}
+@keyframes bmSwipePrev{from{opacity:.45;transform:translateX(-20px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view.swipe-in-next,.view.swipe-in-prev{animation:none!important}}

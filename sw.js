@@ -1,4 +1,4 @@
-const CACHE = "budget-margin-shell-v34-liquid";
+const CACHE = "budget-margin-shell-v35";
 const SHELL = [
   "./",
   "./index.html",

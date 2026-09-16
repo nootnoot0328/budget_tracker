@@ -1,14 +1,17 @@
-# Budget Margin 3.4 — Liquid Margin
+# Budget Margin 3.6 — Capture + History Controls
 
-Implements the Liquid Margin motion + analytics handoff on top of Budget Margin 3.3.
+Built on Budget Margin 3.4 Liquid Margin.
 
 Highlights:
-- Animated liquid budget vessel for Today / This week / Period
-- Expandable envelope cards with one-tap +5 / +10 / +20 / +50 logging
-- Free-margin tank, goal vessels and debt tank on Plan
-- Liquid spending calendar
-- Dedicated Analytics tab with interactive donut and expenditure/savings trend
-- Existing data model, historical migration, notification Capture Inbox, reconciliation and debt forecast preserved
-- Respects `prefers-reduced-motion`
+- Clipboard capture flow for iOS 27: copy a bank notification, open the Home Screen PWA, tap **Paste payment**, and Budget Margin parses it straight into a prefilled confirmation sheet. No paste textbox.
+- Existing URL capture remains as a fallback.
+- Merchant alias learning: rename coded merchant names during capture and remember the clean name + envelope for future captures.
+- History supports adding a transaction to any past date; existing entries can already be edited or deleted.
+- Editing a transaction can optionally apply the merchant name + envelope to all matching historical merchant entries.
+- Envelope rename continues to update every historical entry because transactions reference the envelope ID, not a copied name.
+- New **Merge** control moves all logs, Quick Logs and merchant rules from one envelope into another and removes the old envelope.
+- Per-envelope **Show on Spend home** toggle controls what appears on the home screen without deleting history or budgets.
+- Envelope quick actions expand/collapse in place with a smooth animation instead of redrawing the whole list.
+- Liquid Margin UI, analytics, reconciliation, historical migration, daily/weekly/period limits, goals and debt payoff forecast remain intact.
 
-Deploy all files at the repository root on GitHub Pages. Export a Budget Margin backup before replacing an existing deployment.
+Deploy every file in this folder at the repository root on GitHub Pages. Export a backup before replacing an existing deployment.
