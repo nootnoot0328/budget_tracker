@@ -1,287 +1,61 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Budget Margin">
-  <meta name="theme-color" content="#08171F">
-  <meta name="description" content="Budget Margin — local-first budgeting, capture inbox, historical migration and statement reconciliation.">
-  <meta name="application-name" content="Budget Margin">
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
-  <link rel="stylesheet" href="./styles.css">
-  <link rel="stylesheet" href="./liquid-margin.css">
-  <title>Budget Margin 3.6</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Setpoint</title>
+<meta name="description" content="Adaptive nutrition tracker that measures your energy expenditure from your weight trend and food log, then sets weekly calorie and macro targets.">
+<meta name="theme-color" content="#F2F2F4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Setpoint">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<script>
+  // apply the saved theme before first paint so there's no flash
+  try {
+    var s = JSON.parse(localStorage.getItem("setpoint.v2") || "{}");
+    var t = s.settings && s.settings.theme;
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+</script>
 </head>
 <body>
-<main class="wrap">
-  <header class="apphead">
-    <div class="brand"><span class="brandmark"><svg viewBox="0 0 24 24"><path d="M5 16.5 9.5 12l3 3L19 8.5"/><path d="M15.5 8.5H19V12"/></svg></span><span>Budget Margin</span></div>
-  </header>
+  <main id="app" aria-live="polite"></main>
 
-  <section class="view on" id="v-spend">
-    <div class="hero">
-    <div class="spend-topbar"><div class="segwrap"><span class="seg">
-      <button id="mDay" aria-pressed="false">Today</button>
-      <button id="mWeek" aria-pressed="false">This week</button>
-      <button id="mPeriod" aria-pressed="true">Whole period</button>
-    </span></div><button class="home-log-btn" id="homeLog" type="button">+ Log</button></div>
-    <div class="lm-vessel" id="gauge" role="img" aria-label="Budget remaining">
-      <div class="lm-fill" id="gFillLiquid"></div>
-      <div class="lm-face"><div><span class="lm-unit">S$</span><span class="lm-amt tab" id="gAmt">0</span></div>
-        <div class="lm-cap" id="gCap"></div><div class="lm-pace" id="gPace"></div></div>
-    </div>
-    <div class="lm-spent-cap"><span id="lmSpentText">Spent —</span><span id="lmCapText">Cap —</span></div>
-    <div class="herofoot hero-metrics">
-      <div><span class="metriclabel">Safe today</span><b class="tab" id="safeToday">—</b></div>
-      <span class="divider"></span>
-      <div><span class="metriclabel">Spent</span><b class="tab" id="periodSpent">—</b></div>
-      <span class="divider"></span>
-      <div><span class="metriclabel">Reset</span><b id="daysReset">—</b></div>
-    </div>
-    <div class="pacecompare">
-      <div class="pace-track"><i id="paceActual"></i><span id="paceMarker"></span></div>
-      <div class="pace-caption"><span id="paceStatus">Set your envelope caps to start.</span><span id="pacePercent" class="tab"></span></div>
-    </div>
-    <button class="commitment-note" id="commitmentNote" type="button" hidden></button>
-    </div>
-    <div id="recBox" style="margin-top:14px"></div>
-    <div class="sectionhead capture-head"><h2>Capture inbox</h2><div class="capture-actions"><span id="captureCount">0 waiting</span><button class="textlink" id="pasteCapture" type="button">Paste payment</button></div></div>
-    <div id="captureInbox" class="capture-inbox"></div>
-    <div class="sectionhead quick-head"><h2>Quick log</h2><span id="quickLogHint">saved favourites</span></div>
-    <div id="quickLogs" class="quick-logs"></div>
-    <div class="sectionhead envelope-head"><h2>Envelopes</h2><button class="textlink reorder-toggle" id="reorderToggle" aria-pressed="false">Reorder</button></div>
-    <div class="reorder-tip" id="reorderTip"><svg viewBox="0 0 12 16"><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg><span>Tap Reorder, then drag the handles. This avoids iPhone text selection.</span></div>
-    <div class="list" id="list"></div>
-    <div class="sectionhead recent-head">
-      <h2>Recent</h2>
-      <button class="textlink" id="seeHistory">See all</button>
-    </div>
-    <div id="recentList" class="recent-list"></div>
-  </section>
-
-  <section class="view" id="v-plan">
-    <div class="viewtitle">Plan</div><div class="viewsub">Your cash, commitments, goals and next moves in one place.</div>
-
-    <div class="plan-forecast hero lm-plan-hero">
-      <div class="plan-forecast-head"><span>This budget period</span><b id="planPeriodLabel">—</b></div>
-      <div class="lm-tank" id="planFreeTank">
-        <div class="lm-tank-fill"></div>
-        <div class="lm-tank-face"><span class="metriclabel">FREE MARGIN</span><b class="tab lm-free-value" id="planFree">—</b></div>
+  <div class="dock" id="dock" hidden>
+    <div class="dock-inner">
+      <div class="searchpill" id="dockSearch" role="button" tabindex="0" aria-label="Search for a food">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <span class="ph">Search for a food</span>
+        <button class="scan" id="dockScan" aria-label="Scan a barcode"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M8 8.5v7M11 8.5v7M14 8.5v7M17 8.5v7"/></svg></button>
       </div>
-      <div class="plan-grid lm-plan-grid">
-        <div><span>Envelope left</span><b class="tab" id="planEnvelopeLeft">—</b></div>
-        <div><span>Reserved bills</span><b class="tab" id="planReserved">—</b></div>
-        <div><span>Expected in</span><b class="tab" id="planIncome">—</b></div>
-      </div>
-      <p class="plan-note">Expected income is shown for planning, but is not counted in Safe today until it actually arrives.</p>
+      <button class="icon-btn fabdock" id="dockPlus" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
+  </div>
 
-    <div class="sectionhead"><h2>30-day forecast</h2><span id="forecastSummary">planned cash flow</span></div>
-    <div class="forecast-list" id="forecastList"></div>
+  <nav class="nav" aria-label="Main"><div class="nav-inner" id="navInner"></div></nav>
+  <div id="layer"></div>
 
-    <div class="sectionhead"><h2>Goals & sinking funds</h2><button class="textlink" id="addGoal">+ Goal</button></div>
-    <div class="goal-summary" id="goalSummary"></div>
-    <div class="goal-list" id="goalList"></div>
-
-    <div class="sectionhead"><h2>Ledger</h2><button class="textlink" id="addLedger">+ Entry</button></div>
-    <div class="ledger-summary" id="ledgerSummary"></div>
-    <div class="ledger-list" id="ledgerList"></div>
-
-    <div class="sectionhead"><h2>Accounts</h2><button class="textlink" id="addAccount">+ Add</button></div>
-    <div class="account-summary" id="accountSummary"></div>
-    <div class="account-list" id="accountList"></div>
-    <p class="tiny dim plan-help">Balances are manual reference snapshots for now. Tagging a transaction to an account does not silently change the balance.</p>
-
-    <div class="sectionhead"><h2>Upcoming</h2><button class="textlink" id="addRecurring">+ Schedule</button></div>
-    <div class="upcoming-list" id="upcomingList"></div>
-    <div class="sectionhead recurring-head"><h2>Recurring schedules</h2><span id="recurringCount">0 active</span></div>
-    <div class="schedule-list" id="scheduleList"></div>
-
-    <div class="sectionhead debt-head"><h2>Debt payoff</h2><span>forecast + balances</span></div>
-    <div class="debt-plan hero" id="debtPlanCard">
-      <div class="debt-plan-controls">
-        <label><span>Strategy</span><select id="debtStrategy"><option value="avalanche">Avalanche · highest APR first</option><option value="snowball">Snowball · smallest balance first</option></select></label>
-        <label><span>Total debt budget / month</span><input id="debtMonthlyBudget" inputmode="decimal" placeholder="e.g. 1200"></label>
-      </div>
-      <div class="debt-plan-summary" id="debtPlanSummary"></div>
-      <div class="debt-timeline" id="debtTimeline"></div>
-      <p class="tiny dim" style="margin:10px 0 0">Forecast assumes monthly interest at APR ÷ 12, pays each debt's minimum, then rolls the remaining monthly budget into the selected target. It is a planning estimate, not a lender payoff quote.</p>
-    </div><div class="sectionhead debt-head"><h2>Debt balances</h2><span>tap a balance to update</span></div>
-    <div class="debt-mini hero lm-debt-card">
-      <div class="lm-tank lm-debt-tank" id="dGauge">
-        <div class="lm-tank-fill" id="dFillLiquid"></div>
-        <div class="lm-tank-face"><span><b class="tab lm-debt-value" id="dAmt">—</b><small id="dCap">still owed</small></span><span class="lm-debt-cleared" id="dPace">—</span></div>
-      </div>
-    </div>
-    <div class="list" id="dList"></div>
-    <div class="flex" style="gap:8px;margin-top:14px">
-      <input id="newDebt" placeholder="Name another debt" autocomplete="off">
-      <button class="sm" id="addDebt" style="white-space:nowrap">Add</button>
-    </div>
-  </section>
-
-  <section class="view" id="v-history">
-    <div class="viewtitle">History</div><div class="viewsub">A clean trail of where the money actually went.</div>
-    <div class="flex" style="margin-bottom:4px">
-      <button class="sm" id="hPrev" aria-label="Previous period">‹</button>
-      <span id="hLabel" style="font-weight:600"></span>
-      <button class="sm" id="hNext" aria-label="Next period">›</button>
-    </div>
-    <div class="history-view-tabs seg" role="tablist" aria-label="History view">
-      <button data-hview="list" aria-pressed="true">List</button>
-      <button data-hview="calendar" aria-pressed="false">Calendar</button>
-      <button data-hview="stats" aria-pressed="false">Insights</button>
-      <button data-hview="analytics" aria-pressed="false">Analytics</button>
-    </div>
-    <div id="historyListView">
-      <div class="history-tools">
-        <label class="searchbox" aria-label="Search history">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
-          <input id="hSearch" type="search" placeholder="Search notes or envelopes" autocomplete="off">
-        </label>
-        <select id="hCatFilter" aria-label="Filter history by envelope"><option value="">All envelopes</option></select>
-        <select id="hAccountFilter" aria-label="Filter history by account"><option value="">All accounts</option></select>
-      </div>
-      <div class="history-summary" id="hSummary"></div>
-      <div class="history-add-row"><button class="sm" id="addPastTxn" type="button">+ Add past entry</button></div>
-      <div class="hint">Tap to edit. Swipe left to repeat or delete.</div>
-      <div id="hBody"></div>
-    </div>
-    <div id="historyCalendarView" class="history-alt" hidden>
-      <div class="calendar-weekdays" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
-      <div class="calendar-grid" id="calendarGrid"></div>
-      <div id="calendarDayDetail"></div>
-    </div>
-    <div id="historyStatsView" class="history-alt" hidden>
-      <div id="statsBody"></div>
-    </div>
-    <div id="historyAnalyticsView" class="history-alt" hidden>
-      <div id="analyticsBody"></div>
-    </div>
-  </section>
-
-  <section class="view" id="v-setup">
-    <div class="viewtitle">Settings</div><div class="viewsub">Tune Budget Margin to match the way you actually spend.</div>
-    <h2>Period and currency</h2>
-    <div class="block">
-      <div class="field"><label for="sStart">Budget resets on day</label><select id="sStart"></select></div>
-      <div class="field"><label for="sRate">Ringgit per Singapore dollar</label><input id="sRate" type="text" inputmode="decimal"></div>
-      <div class="field"><label for="sDailyCap">Daily spending limit <span class="dim">(optional)</span></label><input id="sDailyCap" type="text" inputmode="decimal" placeholder="Auto from period budget"><div class="hint">If blank, Today uses a prorated share of your period budget. Set this only if you want a hard daily ceiling.</div></div>
-    </div>
-
-    <h2>Envelopes</h2>
-    <p class="tiny dim" style="margin:-4px 0 10px">Rename an envelope here and every past log under it updates automatically. Use Merge when two envelopes should become one. Choose which envelopes appear on the Spend home.</p>
-    <div id="editor"></div>
-    <div class="flex" style="gap:8px;margin-top:10px">
-      <input id="newCat" placeholder="Name a new envelope" autocomplete="off">
-      <button class="sm" id="addCat" style="white-space:nowrap">Add</button>
-    </div>
-    <div class="block" style="margin-top:12px">
-      <div class="flex"><span class="dim">Total each period</span><b class="tab" id="capTotal">—</b></div>
-    </div>
-
-    <h2>Historical migration</h2>
-    <div class="block">
-      <p class="tiny dim" style="margin:0 0 11px">One-time import for your canonical history file. Budget Margin keeps the original source marker so migrated records can be distinguished from day-to-day entries.</p>
-      <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
-        <button class="sm" id="historicalImport">Import canonical CSV</button>
-        <button class="sm danger" id="historicalRemove" hidden>Remove imported history</button>
-      </div>
-      <input type="file" id="historicalFile" accept=".csv,text/csv" style="display:none">
-      <div id="historicalStatus" class="tiny dim" style="margin-top:11px"></div>
-    </div>
-
-    <h2>Month-end reconciliation</h2>
-    <div class="block">
-      <p class="tiny dim" style="margin:0 0 11px">Import a bank/card CSV or text-based PDF, compare it with Budget Margin, review anything unmatched, then close the month. CSV works fully offline; PDF extraction needs internet for the pinned PDF.js parser.</p>
-      <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
-        <button class="sm" id="statementImport">Import CSV / PDF</button>
-        <button class="sm" id="recNow">Manual check</button>
-      </div>
-      <input type="file" id="statementFile" accept=".csv,.xls,.txt,.pdf,text/csv,text/plain,application/pdf" style="display:none">
-      <div id="statementStatus" class="tiny dim" style="margin-top:11px"></div>
-      <div id="recHist" class="tiny dim" style="margin-top:11px"></div>
-    </div>
-
-    <h2>iPhone capture bridge</h2>
-    <div class="block">
-      <p class="tiny dim" style="margin:0 0 9px">Recommended iOS 27 flow: Shortcut copies the bank notification to the clipboard. Open Budget Margin from your Home Screen, then tap <b>Paste payment</b>. Budget Margin reads the clipboard directly, parses the payment and opens a prefilled confirmation sheet — no text box required. URL capture remains available as a fallback.</p>
-      <div id="captureLink" class="capture-link tiny"></div>
-      <button class="sm" id="testCapture" style="margin-top:10px">Test capture</button>
-    </div>
-
-    <h2>One tap from your home screen</h2>
-    <div class="block">
-      <p class="tiny dim" style="margin:0 0 9px">You can still make direct logging shortcuts for fixed amounts.</p>
-      <div id="shortcuts" class="tiny"></div>
-    </div>
-
-    <h2>Appearance</h2>
-    <div class="block">
-      <div class="setting-row">
-        <div><b>Theme</b><div class="tiny dim">Midnight keeps the current look. Paper Coral borrows the bright, ledger-first feel you liked without copying the old app.</div></div>
-      </div>
-      <div class="theme-grid" id="themeGrid" role="radiogroup" aria-label="Theme">
-        <button class="theme-choice" data-theme="midnight"><span class="theme-swatch midnight"></span><span><b>Midnight</b><small>Current dark look</small></span></button>
-        <button class="theme-choice" data-theme="coral"><span class="theme-swatch coral"></span><span><b>Paper Coral</b><small>Light + warm coral</small></span></button>
-      </div>
-      <div class="setting-row accent-title">
-        <div><b>Accent</b><div class="tiny dim">Controls and highlights only.</div></div>
-      </div>
-      <div class="accent-grid" id="accentGrid" role="radiogroup" aria-label="Accent colour">
-        <button class="accent-dot" data-accent="jade" aria-label="Jade" title="Jade"></button>
-        <button class="accent-dot" data-accent="cyan" aria-label="Cyan" title="Cyan"></button>
-        <button class="accent-dot" data-accent="violet" aria-label="Violet" title="Violet"></button>
-        <button class="accent-dot" data-accent="amber" aria-label="Amber" title="Amber"></button>
-        <button class="accent-dot" data-accent="pink" aria-label="Pink" title="Pink"></button>
-      </div>
-    </div>
-
-    <h2>App and offline <span class="versiontag">3.4</span></h2>
-    <div class="block">
-      <div class="pwa-state" id="pwaState"><span class="pwa-dot"></span><div><b id="pwaTitle">Browser mode</b><div class="tiny dim" id="pwaText">Publish on GitHub Pages, then add Budget Margin to your Home Screen.</div></div></div>
-      <div class="app-update-row">
-        <span class="tiny dim" id="updateText">Updates are checked when Budget Margin opens.</span>
-        <button class="sm" id="checkUpdate">Check now</button>
-      </div>
-    </div>
-
-    <h2>Backup</h2>
-    <div id="warnBox"></div>
-    <div class="block">
-      <p class="tiny dim" style="margin:0 0 11px">Your budget data stays on this device. App updates do not upload it anywhere — keep backups anyway.</p>
-      <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
-        <button class="sm" id="expJson">Export backup</button>
-        <button class="sm" id="expCsv">Export CSV</button>
-        <button class="sm" id="impBtn">Restore</button>
-        <button class="sm" id="recoverPrev">Recover previous</button>
-      </div>
-      <input type="file" id="impFile" accept=".json,application/json" style="display:none">
-      <p class="tiny dim" id="lastExp" style="margin:11px 0 0"></p>
-    </div>
-
-    <h2>Start over</h2>
-    <div class="block"><button class="sm danger" id="wipe">Erase everything</button></div>
-    <p class="tiny dim" style="text-align:center;margin:20px 0 6px" id="cnt"></p>
-  </section>
-</main>
-
-<nav class="nav">
-  <span class="nav-indicator" id="navIndicator" aria-hidden="true"></span>
-  <button data-go="spend" aria-current="true"><svg viewBox="0 0 24 24"><path d="M12 20a8 8 0 1 0-8-8"/><path d="M12 7v5l3 2"/></svg>Spend</button>
-  <button data-go="plan"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M8 3v6M16 3v6M7 13h4M7 17h7"/></svg>Plan</button>
-  <button data-go="history"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h9"/></svg>History</button>
-  <button data-go="setup"><svg viewBox="0 0 24 24"><path d="M5 8h14M5 16h14"/><circle cx="9" cy="8" r="2.2"/><circle cx="15" cy="16" r="2.2"/></svg>Setup</button>
-</nav>
-
-<div class="sheet" id="sheet"><div id="sheetBody"></div></div>
-<div id="toast"><span id="tMsg"></span><button id="undo" style="display:none">Undo</button></div>
-<script src="./liquid-margin.js" defer></script>
-<script src="./app.js" defer></script>
+  <script src="js/engine.js"></script>
+  <script src="js/foods.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/exercises.js"></script>
+  <script src="js/train.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator && location.protocol === "https:") {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(function () {});
+      });
+    }
+  </script>
 </body>
 </html>

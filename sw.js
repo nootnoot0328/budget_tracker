@@ -1,59 +1,55 @@
-const CACHE = "budget-margin-shell-v35";
+/* Setpoint service worker — makes the app work offline after the first visit.
+   Bump VERSION whenever you change any file so phones pick up the update. */
+const VERSION = "setpoint-2.7.0";
 const SHELL = [
-  "./",
-  "./index.html",
-  "./styles.css",
-  "./liquid-margin.css",
-  "./liquid-margin.js",
-  "./app.js",
-  "./manifest.webmanifest",
-  "./icon-180.png",
-  "./icon-192.png",
-  "./icon-512.png"
+  "./", "index.html", "manifest.webmanifest",
+  "css/app.css", "js/engine.js", "js/foods.js", "js/charts.js", "js/exercises.js", "js/train.js", "js/sync.js", "js/app.js", "js/exlib-full.js",
+  "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"
 ];
 
-self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
+self.addEventListener("install", e => {
+  // cache: "reload" skips the browser's HTTP cache, so an update never
+  // installs stale copies of the files it's meant to replace.
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
-self.addEventListener("activate", event => {
-  event.waitUntil(
+self.addEventListener("activate", e => {
+  e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key !== CACHE && (key.startsWith("budget-margin-shell-") || key.startsWith("margin-shell-"))).map(key => caches.delete(key))))
+      .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener("message", event => {
-  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
-});
+self.addEventListener("fetch", e => {
+  const req = e.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
 
-self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET") return;
+  // barcode lookups and the sync Worker must always be live
+  // the update check reads sw.js itself; never answer that from a cache
+  if (url.origin === self.location.origin && url.pathname.endsWith("/sw.js")) return;
+  if (url.hostname.endsWith("openfoodfacts.org") || url.hostname.endsWith("workers.dev")) return;
 
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE).then(cache => cache.put("./index.html", copy));
-          return response;
-        })
-        .catch(() => caches.match("./index.html"))
-    );
+  // fonts and the barcode library: cache-first, they never change
+  if (/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname) || url.hostname === "cdn.jsdelivr.net" || url.hostname === "raw.githubusercontent.com") {
+    e.respondWith(caches.open(VERSION).then(async c => {
+      const hit = await c.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok || res.type === "opaque") c.put(req, res.clone());
+      return res;
+    }));
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      const fresh = fetch(event.request).then(response => {
-        if (response && response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE).then(cache => cache.put(event.request, copy));
-        }
-        return response;
-      }).catch(() => cached);
-      return cached || fresh;
-    })
-  );
+  // app shell and exercise images: serve from cache instantly, refresh in the background.
+  // Exercise images are cached the first time each one is shown.
+  if (url.origin === self.location.origin) {
+    e.respondWith(caches.open(VERSION).then(async c => {
+      const hit = await c.match(req, { ignoreSearch: true });
+      const net = fetch(req).then(res => { if (res.ok) c.put(req, res.clone()); return res; }).catch(() => hit);
+      return hit || net;
+    }));
+  }
 });
