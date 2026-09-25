@@ -306,10 +306,12 @@
     const y = window.scrollY;
     app.innerHTML = "";
     const top = STACK[STACK.length - 1];
-    const v = top ? SCREENS[top.v](top) : ({ dash: viewDash, log: viewLog, train: TR.viewTrain, strategy: viewStrategy, more: viewMore }[TAB])();
+    const onb = needsOnboarding() && !(top && top.v === "sync");
+    document.body.classList.toggle("onb", onb);
+    const v = onb ? viewWelcome() : top ? SCREENS[top.v](top) : ({ dash: viewDash, log: viewLog, train: TR.viewTrain, strategy: viewStrategy, more: viewMore }[TAB])();
     if (anim) v.classList.add("view");
     app.appendChild(v);
-    const dock = !top && (TAB === "dash" || TAB === "log");
+    const dock = !onb && !top && (TAB === "dash" || TAB === "log");
     $("#dock").hidden = !dock;
     app.classList.toggle("no-search", !dock);
     renderNav();
@@ -551,10 +553,160 @@
   }
   function startFresh() {
     const keepTheme = S.settings.theme;
-    S = blank(); S.settings.theme = keepTheme; save(); SEL = today();
+    S = blank(); S.settings.theme = keepTheme; S.settings.onboarding = true; save(); SEL = today();
     TAB = "dash"; STACK = [];
-    push({ v: "profile", onboarding: true });
+    OB.step = 1; render(true);
     toast("Example data cleared");
+  }
+
+  /* =================================================================
+     WELCOME: shown when there's no data. Restore, sync, example data,
+     or a short setup that ends with targets and a training plan.
+     ================================================================= */
+  const needsOnboarding = () => !!S.settings.onboarding && !Object.keys(S.weights).length && !Object.keys(S.intake).length;
+  const OB = { step: 0, d: null };
+  function obDefaults() {
+    return { sex: "m", age: null, heightCm: null, activity: 1.35, kg: null, bf: null, aim: "loss", goalWeight: null, ratePct: 0.5,
+      days: 3, equip: ["db"], level: "beginner" };
+  }
+  function viewWelcome() {
+    const d = OB.d = OB.d || obDefaults();
+    const root = h("div", { class: "welcome" });
+    const steps = ["You", "Body", "Goal", "Training", "Plan"];
+    const next = () => { OB.step++; render(true); window.scrollTo(0, 0); };
+    const back = () => { OB.step--; render(true); window.scrollTo(0, 0); };
+    const nav = (ok, label, why) => h("div", { class: "obnav" },
+      OB.step > 1 ? h("button", { class: "btn", onclick: back }, "Back") : h("button", { class: "btn", onclick: () => { OB.step = 0; render(true); } }, "Back"),
+      h("button", { class: "btn primary", disabled: ok ? null : true, onclick: () => ok && next() }, label || "Next"),
+      why && !ok ? h("p", { class: "note", style: { gridColumn: "1/3", textAlign: "center", margin: "4px 0 0" } }, why) : null);
+    const chips = (opts, cur, set, multi) => h("div", { class: "daychips" }, opts.map(([v, l]) =>
+      h("button", { class: "chip" + ((multi ? cur.includes(v) : cur === v) ? " on" : ""), onclick: () => { set(v); render(false); } }, l)));
+    const num = (id, val, ph, set, step) => h("input", { class: "inp", id, type: "number", inputmode: "decimal", step: step || "any", value: val ?? "", placeholder: ph,
+      oninput: e => { set(e.target.value === "" ? null : +e.target.value); paintNav(); } });
+    let paintNav = () => { };
+    if (OB.step > 0) root.append(h("div", { class: "obsteps" }, steps.map((t, i) => h("span", { class: i + 1 < OB.step ? "done" : i + 1 === OB.step ? "on" : null }, t))));
+
+    if (OB.step === 0) {
+      root.append(h("div", { class: "obhero" },
+        h("div", { class: "oblogo", html: flame() }),
+        h("h1", null, "Welcome to Setpoint"),
+        h("p", null, "Calorie and macro targets that adjust to what your scale actually does, plus a training plan that progresses with you.")));
+      const file = h("input", { type: "file", accept: "application/json,.json", hidden: true, onchange: e => { const f = e.target.files[0]; if (f) { doImport(f); } } });
+      root.append(file,
+        h("button", { class: "obopt primary", onclick: () => { OB.step = 1; render(true); } }, h("b", null, "Set me up"), h("span", null, "About 2 minutes: your details, your goal, your equipment. You get targets and a plan at the end.")),
+        h("div", { class: "lbl", style: { margin: "22px 4px 8px" } }, "Used Setpoint before?"),
+        h("button", { class: "obopt", onclick: () => file.click() }, h("b", null, "Restore from a backup"), h("span", null, "Pick the setpoint-….json file you saved with Back up now (Files, iCloud Drive).")),
+        h("button", { class: "obopt", onclick: () => push({ v: "sync" }) }, h("b", null, "Sync from my other device"), h("span", null, "You've set up Cloudflare sync already. Enter the Worker address, app key and passphrase.")),
+        h("button", { class: "obopt ghost", onclick: () => { seedDemo(); render(true); } }, h("b", null, "Just look around"), h("span", null, "Loads four weeks of example data. You can clear it any time.")));
+      return root;
+    }
+
+    if (OB.step === 1) {
+      root.append(h("h2", { class: "obh" }, "About you"),
+        h("p", { class: "note" }, "Used for your starting calorie estimate. After about two weeks of weigh-ins and food logs, Setpoint measures your real burn and this matters less."),
+        h("div", { class: "card" },
+          h("div", { class: "lbl", style: { marginTop: 0 } }, "Sex"), chips([["m", "Male"], ["f", "Female"]], d.sex, v => d.sex = v),
+          h("div", { class: "fields" }, field("Age", num("ob_age", d.age, "e.g. 32", v => d.age = v, 1)), field("Height (cm)", num("ob_h", d.heightCm, "e.g. 172", v => d.heightCm = v, 1))),
+          h("div", { class: "lbl" }, "Day-to-day activity, outside workouts"),
+          chips([[1.2, "Desk-bound"], [1.35, "Light"], [1.45, "On my feet"], [1.6, "Active job"]], d.activity, v => d.activity = v)));
+      const ok = () => d.age >= 14 && d.age <= 100 && d.heightCm >= 120 && d.heightCm <= 230;
+      const n = h("div"); root.append(n);
+      paintNav = () => { n.innerHTML = ""; n.append(nav(ok(), "Next", "Enter your age and height.")); }; paintNav();
+      return root;
+    }
+
+    if (OB.step === 2) {
+      root.append(h("h2", { class: "obh" }, "Your body today"),
+        h("p", { class: "note" }, "Weigh yourself in the morning, after the toilet, before eating. Body fat is optional; if your scale shows it (Mi scale via Zepp Life does), Setpoint uses it to set protein from lean mass and to check your goal is realistic."),
+        h("div", { class: "card" }, h("div", { class: "fields" },
+          field("Weight (kg)", num("ob_kg", d.kg, "e.g. 86.2", v => d.kg = v, 0.1)),
+          field("Body fat % (optional)", num("ob_bf", d.bf, "e.g. 28", v => d.bf = v, 0.1)))));
+      const ok = () => d.kg >= 30 && d.kg <= 300 && (d.bf == null || (d.bf >= 3 && d.bf <= 70));
+      const n = h("div"); root.append(n);
+      paintNav = () => { n.innerHTML = ""; n.append(nav(ok(), "Next", "Enter your weight.")); }; paintNav();
+      return root;
+    }
+
+    if (OB.step === 3) {
+      root.append(h("h2", { class: "obh" }, "What's the aim?"),
+        h("div", { class: "obaims" }, [["loss", "Lose fat", "Eat below your burn, keep muscle with lifting and protein."], ["maintain", "Stay here", "Hold your weight, get stronger, recompose slowly."], ["gain", "Build muscle", "A small surplus so training turns into muscle, not just fat."]]
+          .map(([k, t, sub]) => h("button", { class: "obopt" + (d.aim === k ? " on" : ""), onclick: () => { d.aim = k; d.ratePct = k === "gain" ? 0.25 : 0.5; render(false); } }, h("b", null, t), h("span", null, sub)))));
+      if (d.aim !== "maintain") {
+        const paces = d.aim === "loss" ? [[0.25, "Gentle"], [0.5, "Steady"], [0.75, "Brisk"], [1.0, "Aggressive"]] : [[0.15, "Lean"], [0.25, "Steady"], [0.5, "Faster"]];
+        root.append(h("div", { class: "card" },
+          field(`Goal weight (kg)${d.aim === "loss" ? " — optional" : " — optional"}`, num("ob_gw", d.goalWeight, d.aim === "loss" ? `below ${d.kg}` : `above ${d.kg}`, v => d.goalWeight = v, 0.1)),
+          h("div", { class: "lbl" }, "Pace"),
+          chips(paces, d.ratePct, v => d.ratePct = v),
+          h("p", { class: "note", style: { marginBottom: 0 } }, `${d.ratePct}% of body weight a week = about ${(d.kg * d.ratePct / 100).toFixed(2)} kg/week.` +
+            (d.aim === "loss" ? (d.ratePct >= 1 ? " Fast: fine for a few weeks, but muscle loss and hunger climb above ~1%/week." : " 0.5–0.75% is the usual sweet spot for keeping muscle.") : " Past ~0.5%/week most of the extra is fat."))));
+      }
+      const gwOk = () => d.aim === "maintain" || d.goalWeight == null || (d.aim === "loss" ? d.goalWeight < d.kg : d.goalWeight > d.kg);
+      const n = h("div"); root.append(n);
+      paintNav = () => { n.innerHTML = ""; n.append(nav(gwOk(), "Next", d.aim === "loss" ? "Goal weight should be below your current weight." : "Goal weight should be above your current weight.")); }; paintNav();
+      return root;
+    }
+
+    if (OB.step === 4) {
+      root.append(h("h2", { class: "obh" }, "Training"),
+        h("p", { class: "note" }, d.aim === "loss" ? "Lifting while you diet is what makes the weight you lose fat rather than muscle." : "Setpoint builds a plan for your equipment and moves you up as you get stronger."),
+        h("div", { class: "card" },
+          h("div", { class: "lbl", style: { marginTop: 0 } }, "Days a week you can lift"),
+          chips([[0, "Not now"], [2, "2"], [3, "3"], [4, "4"], [5, "5"]], d.days, v => d.days = v),
+          d.days ? [h("div", { class: "lbl" }, "Equipment you have"),
+            chips([["bar", "Pull-up bar"], ["db", "Dumbbells & bench"], ["gym", "Full gym"]], d.equip, v => d.equip = d.equip.includes(v) ? d.equip.filter(x => x !== v) : d.equip.concat([v]), true),
+            h("p", { class: "note", style: { marginTop: "-4px" } }, d.equip.length ? "" : "None picked: bodyweight only, which works fine to start."),
+            h("div", { class: "lbl" }, "Experience"),
+            chips([["beginner", "New or returning"], ["intermediate", "1+ year consistent"]], d.level, v => d.level = v)] : null));
+      const n = h("div"); root.append(n);
+      paintNav = () => { n.innerHTML = ""; n.append(nav(true, "See my plan")); }; paintNav();
+      return root;
+    }
+
+    // step 5: summary. Build the real state, compute, show; Start commits it.
+    const T0 = today(), keepTheme = S.settings.theme;
+    const X = blank(); X.settings.theme = keepTheme;
+    Object.assign(X.profile, { sex: d.sex, age: d.age, heightCm: d.heightCm, activity: d.activity });
+    X.weights[T0] = { kg: r1(d.kg), bf: d.bf != null ? r1(d.bf) : null, mm: null };
+    Object.assign(X.goal, { mode: d.aim, ratePct: d.aim === "maintain" ? 0.5 : d.ratePct, goalWeight: d.aim === "maintain" ? null : d.goalWeight, startWeight: r1(d.kg), startDate: T0 });
+    const saved = S; S = X; invalidate();
+    const t = E.computeTargets(S), c = E.makeCheckin(S);
+    let plan = null, tprof = null;
+    if (d.days) { tprof = { goal: d.aim === "loss" ? "fatloss" : d.aim === "gain" ? "muscle" : "general", days: d.days, equip: d.equip.slice(), level: d.level }; plan = E.buildPlan(window.SP_EX, tprof); }
+    const feas = d.bf != null && d.goalWeight ? E.impliedBf(S, d.goalWeight) : null;
+    S = saved; invalidate();
+    root.append(h("h2", { class: "obh" }, "Your starting plan"));
+    if (!t.ready || !c) { root.append(h("div", { class: "empty-state" }, "Couldn't compute targets from those details. Go back and check them.")); root.append(nav(false)); return root; }
+    const eta = d.goalWeight && t.rateKgWk && Math.sign(d.goalWeight - d.kg) === Math.sign(t.rateKgWk) ? addDays(T0, Math.round((d.goalWeight - d.kg) / t.rateKgWk * 7)) : null;
+    root.append(h("div", { class: "card obsum" },
+      h("div", { class: "obk" }, h("b", null, f0(c.weekday.kcal)), h("span", null, "kcal a day")),
+      h("div", { class: "obmac" }, MAC.filter(m => m.k !== "kcal").map(m => h("div", null, h("b", { style: { color: m.color } }, f0(c.weekday[m.k]), h("small", null, "g")), h("span", null, m.label)))),
+      h("div", { class: "divider" }),
+      kv("Estimated burn", `${f0(t.exp.kcal)} kcal/day (formula; measured after ~2 weeks)`),
+      kv("Resting rate floor", `${f0(t.rmr)} kcal`),
+      d.aim === "maintain" ? kv("Aim", "Hold weight") : kv("Pace", `${t.rateKgWk > 0 ? "+" : ""}${t.rateKgWk.toFixed(2)} kg/week`),
+      eta ? kv("Goal weight", `${f1(d.goalWeight)} kg around ${dLong(eta)}`) : null,
+      kv("Protein basis", d.bf != null ? "Lean mass (from your body fat)" : "Body weight")));
+    const warn = t.flags.filter(f => f.t !== "ok");
+    if (feas != null && feas < (d.sex === "m" ? 8 : 15)) warn.push({ t: "bad", msg: `${f1(d.goalWeight)} kg would mean about ${Math.max(0, r0(feas))}% body fat even if you lost no muscle. Consider a higher goal weight; you can change it later in Strategy.` });
+    if (warn.length) root.append(h("div", { style: { marginTop: "10px" } }, flags(warn)));
+    if (plan) root.append(h("div", { class: "card", style: { marginTop: "12px" } },
+      h("h3", { class: "ctitle" }, `Training: ${plan.days.length === 2 ? "full body, alternating A and B" : "upper / lower split"}, ${d.days} days a week`),
+      plan.days.map(dd => h("div", { style: { marginTop: "10px" } }, h("b", null, dd.name),
+        h("div", { class: "muted small", style: { lineHeight: 1.6 } }, dd.slots.map(sl => { const x = window.SP_EX.ex[sl.ex]; return `${x ? x.n : sl.ex} ${sl.sets}×${x && x.type === "time" ? sl.lo + "s" : sl.lo + "–" + sl.hi}`; }).join(" · "))))));
+    root.append(h("div", { class: "card", style: { marginTop: "12px" } },
+      h("h3", { class: "ctitle" }, "What happens next"),
+      h("p", { class: "note" }, "1. Weigh in most mornings. 2. Log what you eat, even the messy days. 3. Every week Setpoint checks in and adjusts your targets from what actually happened. The first two weeks run on the formula; after that it's measuring you.")));
+    root.append(h("div", { class: "obnav" },
+      h("button", { class: "btn", onclick: back }, "Back"),
+      h("button", { class: "btn primary", onclick: () => {
+        S = X; S.settings.onboarding = false;
+        S.program.checkins = [c];
+        if (plan) { S.train.profile = tprof; S.train.plan = plan; }
+        SNAP = null; save(); invalidate();
+        OB.step = 0; OB.d = null; TAB = "dash"; STACK = []; SEL = today();
+        render(true); toast("You're set. Log your first meal.");
+      } }, "Start")));
+    return root;
   }
 
   /* =================================================================
@@ -1245,7 +1397,7 @@
         if (p && p.v === 2) S = merge(p);
         else if (p && p.v === 1) S = migrateV1(p);
         else throw new Error("unknown");
-        S.settings.demo = false; save(); applyTheme(); render(true); toast("Imported");
+        S.settings.demo = false; S.settings.onboarding = false; STACK = []; save(); applyTheme(); render(true); toast("Imported");
       } catch (e) { toast("That file isn't a Setpoint export. Nothing changed."); }
     };
     fr.readAsText(file);
@@ -2070,7 +2222,7 @@
       root.append(section("Apple Health"));
       root.append(h("div", { class: "card" },
         h("p", { class: "note", style: { marginTop: 0 } }, "A Shortcut on your iPhone sends each morning's weigh-in, body fat and steps to the Worker's inbox. Setpoint picks them up the next time it syncs. A weight you type yourself always wins over the Health reading for that day."),
-        SC.inboxKey ? copyRow("Inbox key (for the Shortcut)", SC.inboxKey) : h("p", { class: "note" }, "The inbox key was generated on another device. Copy it from there, or from Cloudflare."),
+        SC.inboxKey ? copyRow("Inbox key (for the Shortcut)", SC.inboxKey) : h("p", { class: "note" }, "The inbox key was generated on another device. Copy it from there, or from wherever you saved it (Cloudflare never shows a secret again after you save it)."),
         copyRow("Inbox address", (SC.url || "").replace(/\/+$/, "") + "/inbox"),
         h("button", { class: "btn block", style: { marginTop: "12px" }, onclick: () => push({ v: "shortcut" }) }, "Set up the Shortcut")));
       root.append(section("This device"));
@@ -2152,7 +2304,7 @@
     };
     TR = window.SPTrain(X);
     Object.assign(SCREENS, TR.screens);
-    if (!load()) seedDemo();
+    if (!load()) { S = blank(); S.settings.onboarding = true; save(); }
     applyTheme();
     $("#dockSearch").addEventListener("click", e => { if (!e.target.closest(".scan")) logSheet({}); });
     $("#dockScan").addEventListener("click", e => { e.stopPropagation(); logSheet({ tab: "scan" }); });

@@ -343,7 +343,7 @@
     if (rmr && kcal < rmr) {
       kcal = rmr; floored = true;
       rateKgWk = (kcal - exp.kcal) * 7 / kpk;
-      flags.push({ t: "bad", msg: `The requested ${r1(requested)} kg/wk would put intake below your estimated resting rate (${r0(rmr)} kcal). Held at that floor, which gives ${r1(rateKgWk)} kg/wk.` });
+      flags.push({ t: "bad", msg: `The requested ${Math.abs(requested).toFixed(2)} kg/wk would put intake below your estimated resting rate (${r0(rmr)} kcal). Targets are held at that floor, which gives about ${Math.abs(rateKgWk).toFixed(2)} kg/wk. Once your real burn is measured this may loosen.` });
     }
     const ratePctWk = rateKgWk / trendKg * 100;
     if (!floored && Math.abs(ratePctWk) > 1.0) flags.push({

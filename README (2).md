@@ -30,6 +30,10 @@ No subscription. Static files on GitHub Pages, and your data stays in your brows
 5. **Explained check-ins.** Each check-in splits the change into expenditure movement, goal-rate effect and trend-weight change.
 6. **Exercise calories are never added back.** Your workouts are already inside the measured expenditure, so the app shows a MET estimate for interest and leaves your food budget alone.
 
+## First launch
+
+With no saved data, Setpoint opens a welcome screen instead of the dashboard: **Set me up** (age, height, activity, weight and optional body fat, goal and pace, training days, equipment and experience, then a summary with calories, macros, arrival date and a training plan), **Restore from a backup**, **Sync from my other device**, or **Just look around** with example data. Clearing the example data takes you into the same setup.
+
 ## Deploy to GitHub Pages
 
 1. Create a new repository on GitHub (public, for free Pages).
