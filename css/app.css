@@ -343,7 +343,7 @@ input[type="checkbox"] { width: 20px; height: 20px; padding: 0; border-radius: 6
 .env-edit-head input { flex: 1; }
 .env-edit-head .cap { max-width: 104px; text-align: right; }
 .dragging { opacity: .6; }
-.code { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; background: var(--sunk); padding: 10px; border-radius: 10px; color: var(--dim); }
+.code { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; white-space: pre-wrap; background: var(--sunk); padding: 10px; border-radius: 10px; color: var(--dim); }
 .receipt-img { width: 100%; max-height: 220px; object-fit: contain; border-radius: 14px; background: var(--sunk); margin-bottom: 12px; }
 .items { font-size: 13px; color: var(--dim); max-height: 160px; overflow: auto; margin: 0 0 12px; padding: 8px 12px; background: var(--sunk); border-radius: 12px; }
 .items div { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }

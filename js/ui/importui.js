@@ -1,7 +1,7 @@
 /* Budget Margin 4 — screens for bringing money in: pasted bank alerts, receipt photos,
    bank statements (CSV/PDF), the month-end check and the one-time historical import. */
 import { h, $, icon, money, rmf, curMoney, dateShort, iso, today, toCents, esc } from "../util.js";
-import { S, save } from "../state.js";
+import { S, save, AIC, saveAIC } from "../state.js";
 import * as C from "../calc.js";
 import * as I from "../imports.js";
 import * as AI from "../ai.js";
@@ -29,6 +29,34 @@ export async function pasteNotification() {
   if (r === "noamount") { closeSheet(); toast(c.aiFailed ? "No payment found (AI: " + c.aiFailed + ")" : "No payment amount found in the copied text"); return; }
   if (r === "duplicate") { closeSheet(); toast("That alert is already in the inbox"); return; }
   save(); openCapture(c.id);
+}
+/* ═════════ bank alerts waiting on the Worker (posted by an iOS Shortcut automation) ═════════
+   Needs the Worker address + app key (Settings → AI assist); works whether or not AI is switched on. */
+let collecting = false, lastCollect = 0;
+export async function collectWorkerCaptures(force) {
+  if (collecting || !(AIC.url && AIC.appKey) || navigator.onLine === false) return 0;
+  if (!force && Date.now() - lastCollect < 30000) return 0;
+  collecting = true; lastCollect = Date.now();
+  try {
+    const base = AI.aiBase(), H = { Authorization: "Bearer " + AIC.appKey, "Content-Type": "application/json" };
+    const r = await fetch(base + "/capture", { headers: H, cache: "no-store" });
+    if (r.status === 404) { AIC.captureRoute = false; saveAIC(); return 0; }
+    if (!r.ok) return 0;
+    AIC.captureRoute = true; AIC.lastCollect = Date.now(); saveAIC();
+    const items = ((await r.json()) || {}).items || [];
+    if (!items.length) return 0;
+    let added = 0, skipped = 0;
+    for (const it of items.slice(0, 50)) {
+      const c = I.parseNotificationText(it.text || "", { app: it.app || "Alert", timestamp: it.ts || it.received || "" });
+      c.fingerprint = I.captureFingerprint(c); c.source = "shortcut";
+      if (AI.aiOn()) { try { I.mergeAiReading(c, await AI.readNotification(it.text || "")); } catch (e) { c.aiFailed = AI.aiErr(e); } }
+      if (I.addCapture(c) === "added") added++; else skipped++;
+    }
+    await fetch(base + "/capture", { method: "DELETE", headers: H, body: JSON.stringify({ keys: items.slice(0, 50).map(i => i.key) }) }).catch(() => { });
+    if (added) { save(); toast(added + (added === 1 ? " bank alert" : " bank alerts") + " to confirm" + (skipped ? " · " + skipped + " skipped (no amount or already in)" : "")); }
+    else if (skipped) toast(skipped + " bank alert" + (skipped === 1 ? "" : "s") + " skipped (no amount or already in)");
+    return added;
+  } catch (e) { return 0; } finally { collecting = false; }
 }
 /* from an iOS Shortcut: #capture=1&text=…&app=… */
 export function handleCaptureURL() {

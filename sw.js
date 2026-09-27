@@ -1,5 +1,5 @@
 /* Budget Margin 4 service worker: app shell cached for offline use; data never touches it. */
-const CACHE = "budget-margin-shell-v40";
+const CACHE = "budget-margin-shell-v41";
 const SHELL = [
   "./", "./index.html", "./css/app.css", "./manifest.webmanifest",
   "./js/main.js", "./js/util.js", "./js/state.js", "./js/calc.js", "./js/ai.js", "./js/imports.js", "./js/proposals.js",

@@ -5,7 +5,7 @@ import * as C from "../calc.js";
 import * as AI from "../ai.js";
 import { removeHistoricalImports, addCapture, parseNotificationText } from "../imports.js";
 import { toast, confirmSheet, field, options, toggleRow, badge, applyTheme } from "./core.js";
-import { pickStatement, pickHistorical, pasteNotification } from "./importui.js";
+import { pickStatement, pickHistorical, pasteNotification, collectWorkerCaptures } from "./importui.js";
 
 let go = () => { }, page = "main", pwa = { standalone: false, updateReady: false, check: null };
 export const initSettings = nav => (go = nav);
@@ -135,13 +135,26 @@ function importPage(body) {
     h("b", "Bank or card statement"),
     h("p.hint", "Import a CSV or PDF, compare it with what you've logged and add anything missing. CSV works offline; PDFs need internet once for the reader." + (last ? " Last: " + last.label + ", " + last.matched + " matched, " + last.missing + " missing." : "")),
     h("button.btn.sm", { type: "button", style: { marginTop: "10px" }, onclick: pickStatement }, "Import statement")));
-  const link = location.href.split("?")[0].split("#")[0];
+  const link = location.href.split("?")[0].split("#")[0], wk = String(AIC.url || "").replace(/\/+$/, "");
+  const status = !(AIC.url && AIC.appKey) ? "Connect your Worker first (AI assist page). AI itself can stay off."
+    : AIC.captureRoute === false ? "Your Worker is older than 1.3.0, so it has no /capture inbox. Paste the new worker.js from the setpoints repo into Cloudflare and Deploy."
+    : AIC.lastCollect ? "Worker connected · last checked " + new Date(AIC.lastCollect).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Worker connected";
   body.appendChild(h("div.card",
-    h("b", "Bank alerts from your iPhone"),
-    h("p.hint", "Set up an iOS Shortcut that copies the bank notification, then tap + → Paste alert in Budget Margin. Or have the Shortcut open this link with the alert text:"),
-    h("div.code", { style: { margin: "10px 0" } }, link + "#capture=1&app=DBS&text=[URL-ENCODED ALERT TEXT]"),
-    h("div.btn-row", h("button.btn.sm.soft", { type: "button", onclick: pasteNotification }, "Paste alert now"),
+    h("b", "Bank alerts, automatically"),
+    h("p.hint", "An iOS 27 Shortcut automation (trigger: Notification from your bank app) sends each alert to your Worker. Budget Margin collects them whenever you open it, and they wait under “payments to confirm” on Home. Nothing is logged until you confirm."),
+    h("p.hint", { style: { color: AIC.captureRoute === false ? "var(--amber)" : "" } }, status),
+    wk ? h("div", { style: { marginTop: "10px" } },
+      h("div.label", "Shortcut settings"),
+      h("div.code", "URL: " + wk + "/capture\nMethod: POST\nHeader: Authorization = Bearer <your INBOX_KEY>\nRequest body: JSON, key \"text\" = Notification title + body, key \"app\" = DBS"),
+      h("p.hint", "Use the inbox key, not the app key: it can only add alerts, never read your data.")) : null,
+    h("div.btn-row", { style: { marginTop: "10px" } },
+      h("button.btn.sm", { type: "button", disabled: !(AIC.url && AIC.appKey), onclick: async () => { toast("Checking…"); const n = await collectWorkerCaptures(true); if (!n) toast(AIC.captureRoute === false ? "Worker needs updating to 1.3.0" : "No new alerts"); } }, "Check now"),
       h("button.btn.sm.soft", { type: "button", onclick: () => { const r = addCapture(parseNotificationText("Old Chang Kee, Singapore, SG\nSGD 4.90", { app: "DBS Bank" })); if (r === "added") save(); toast(r === "added" ? "Test payment added to your inbox" : "The test payment is already in your inbox"); } }, "Add a test alert"))));
+  body.appendChild(h("div.card",
+    h("b", "Paste an alert by hand"),
+    h("p.hint", "Copy any bank notification, then tap + → Paste alert. A Shortcut can also open this link with the alert text:"),
+    h("div.code", { style: { margin: "10px 0" } }, link + "#capture=1&app=DBS&text=[URL-ENCODED ALERT TEXT]"),
+    h("button.btn.sm.soft", { type: "button", onclick: pasteNotification }, "Paste alert now")));
   const shortcuts = S.cats.slice(0, 4).map(c => { const v = (c.quick && c.quick[0]) || 500; return h("div.code", { style: { marginTop: "6px" } }, c.name + " " + (v / 100).toFixed(2) + " → " + link + "?log=" + c.id + "&amt=" + v); });
   body.appendChild(h("div.card", h("b", "One-tap Home Screen shortcuts"), h("p.hint", "Open one of these links from a Shortcut to log a fixed amount instantly."), shortcuts));
   const hi = S.historicalImports;

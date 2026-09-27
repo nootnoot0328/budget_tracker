@@ -51,9 +51,15 @@ function boot() {
   onSaveFail(() => toast("Storage is blocked, so nothing was saved"));
   // the day may roll over while the app sits in the background
   let lastDay = today().getTime();
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && today().getTime() !== lastDay) { lastDay = today().getTime(); render(); } });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (today().getTime() !== lastDay) { lastDay = today().getTime(); render(); }
+    IU.collectWorkerCaptures();
+  });
+  window.addEventListener("online", () => IU.collectWorkerCaptures());
   go("home");
   IU.handleCaptureURL();
+  IU.collectWorkerCaptures(true);
   handleLogURL();
   registerSW();
 }
