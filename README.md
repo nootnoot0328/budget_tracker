@@ -1,3 +1,44 @@
+# Budget Margin 4.0
+
+A rebuild of Budget Margin: same data, cleaner app, and optional AI that reads things for you and answers questions from your own numbers.
+
+## What changed from 3.7
+
+**Layout.** Four tabs and one + button instead of four long scrolling pages.
+- **Home**: what's left (liquid gauge), safe to spend today, pace, anything that needs attention (alerts to confirm, bills set aside, last period's bank check), quick logs, envelopes, recent.
+- **Activity**: every entry in one list, spending *and* money in, transfers and refunds, with money in / out / net for the period. Calendar and Insights (where it went, versus your usual, trend) sit in the same place. Search is behind the magnifier.
+- **+**: spending keypad, money in, transfer, scan receipt, paste bank alert, import statement.
+- **Plan**: Overview (free margin, next 30 days, month-end check), Bills, Goals, Debt, Accounts. Accounts are grouped (cash, bank, savings, prepaid, credit cards, loans, investments, other).
+- **Ask**: chat about your money.
+- **Settings** (gear icon): short pages instead of one long list.
+
+**AI (optional, off by default)**, through the `/ai` route on the Setpoint Worker, so no new Worker and no key in this repo:
+- **Receipt photos**: the photo is shrunk on the phone, read, and shown next to the result for you to check before saving. The items it reads are kept on the entry.
+- **PDF statements**: rows whose amount isn't in the PDF text are thrown away, and the rows are checked against the statement's own printed totals.
+- **Bank alerts**: picks out the merchant, amount and type, and flags refunds, transfers and foreign currency. An amount that isn't in the alert is rejected.
+- **Envelope suggestions** for merchants without a rule. Only merchant names and envelope names are sent.
+- **Ask**: sends a computed summary of your budget plus the last three periods of transactions. Totals, pace and debt forecasts, including "at the pace you're actually paying" and what-if budgets, are calculated on the phone first. The model explains; it doesn't calculate. Plan changes (debt budget and order, envelope caps, daily limit, goals) arrive as cards: the before and after are recomputed on the phone, nothing changes until you tap **Apply**, and every Apply can be undone.
+
+**Also new:** debt "plan vs actual" from your recorded payments, a debt-free date at your actual pace, envelope caps versus your 3-period average, one-tap "Log" for bills, undo on almost everything.
+
+## Data
+- Same storage key and format as 3.x (`margin.v2`), so 4.0 opens your existing data as-is, and 3.7 can still open data written by 4.0 if you need to roll back. New fields are additive.
+- AI settings (`margin.ai`) and the chat history (`margin.chat`) are stored separately and are never part of backups.
+
+## Code
+No build step. ES modules:
+- `js/state.js`: saved data
+- `js/calc.js`: every number the app shows
+- `js/ai.js`: Worker client, prompts and validation
+- `js/proposals.js`: chat plan changes
+- `js/imports.js`: alerts, CSV/PDF, reconciliation, history import
+- `js/ui/*`: screens
+- `css/app.css`
+
+Deploy every file at the repository root on GitHub Pages. Export a backup before replacing an existing deployment.
+
+---
+
 # Budget Margin 3.7 — AI assist + reconciliation fixes
 
 ## New in 3.7

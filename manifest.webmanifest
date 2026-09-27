@@ -1,7 +1,7 @@
 {
   "name": "Budget Margin",
   "short_name": "Budget Margin",
-  "description": "Local-first budgeting with notification capture inbox, statement reconciliation, optional AI assist, forecasts, goals and analytics.",
+  "description": "Local-first envelope budgeting with receipt scanning, statement checks and an assistant that answers from your own numbers.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
