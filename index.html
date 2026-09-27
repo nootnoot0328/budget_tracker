@@ -8,14 +8,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Budget Margin">
   <meta name="theme-color" content="#08171F">
-  <meta name="description" content="Budget Margin — local-first budgeting, capture inbox, historical migration and statement reconciliation.">
+  <meta name="description" content="Budget Margin — local-first budgeting, capture inbox, statement reconciliation and optional AI assist.">
   <meta name="application-name" content="Budget Margin">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./liquid-margin.css">
-  <title>Budget Margin 3.6</title>
+  <title>Budget Margin 3.7</title>
 </head>
 <body>
 <main class="wrap">
@@ -215,6 +215,19 @@
       <button class="sm" id="testCapture" style="margin-top:10px">Test capture</button>
     </div>
 
+    <h2>AI assist <span class="dim">(optional)</span></h2>
+    <div class="block">
+      <p class="tiny dim" style="margin:0 0 11px">Reads bank notifications and PDF statements the built-in parser can't, spots refunds and transfers, and suggests envelopes for merchants you haven't taught Budget Margin yet. It uses the <b>/ai</b> route on your Setpoint Worker, so the AI key stays in Cloudflare. When it's on, the text of the notification or statement you're importing goes to your Worker and its AI provider. Envelope suggestions send merchant names and envelope names only. Nothing is saved until you confirm it, and your own merchant rules always win.</p>
+      <div class="field"><label for="aiUrl">Worker address</label><input id="aiUrl" type="url" inputmode="url" placeholder="https://setpoint-sync.you.workers.dev" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="aiKey">App key</label><input id="aiKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Same APP_KEY Setpoint uses"></div>
+      <label class="toggle-row compact"><input id="aiOn" type="checkbox"><span><b>Use AI assist</b><small id="aiStatus">Off</small></span></label>
+      <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
+        <button class="sm" id="aiTest" type="button">Test connection</button>
+        <button class="sm" id="aiFromSetpoint" type="button" hidden>Use Setpoint's Worker</button>
+      </div>
+      <p class="tiny dim" style="margin:11px 0 0">AI calls count toward the Worker's daily limit (<b>AI_DAILY_LIMIT</b>), which Setpoint shares. The key is kept on this device only and is never included in backups.</p>
+    </div>
+
     <h2>One tap from your home screen</h2>
     <div class="block">
       <p class="tiny dim" style="margin:0 0 9px">You can still make direct logging shortcuts for fixed amounts.</p>
@@ -242,7 +255,7 @@
       </div>
     </div>
 
-    <h2>App and offline <span class="versiontag">3.4</span></h2>
+    <h2>App and offline <span class="versiontag">3.7</span></h2>
     <div class="block">
       <div class="pwa-state" id="pwaState"><span class="pwa-dot"></span><div><b id="pwaTitle">Browser mode</b><div class="tiny dim" id="pwaText">Publish on GitHub Pages, then add Budget Margin to your Home Screen.</div></div></div>
       <div class="app-update-row">
@@ -254,7 +267,7 @@
     <h2>Backup</h2>
     <div id="warnBox"></div>
     <div class="block">
-      <p class="tiny dim" style="margin:0 0 11px">Your budget data stays on this device. App updates do not upload it anywhere — keep backups anyway.</p>
+      <p class="tiny dim" style="margin:0 0 11px">Your budget data stays on this device. App updates do not upload it anywhere. If AI assist is on, only the item you're importing is sent to it. Keep backups anyway.</p>
       <div class="flex" style="gap:8px;justify-content:flex-start;flex-wrap:wrap">
         <button class="sm" id="expJson">Export backup</button>
         <button class="sm" id="expCsv">Export CSV</button>
