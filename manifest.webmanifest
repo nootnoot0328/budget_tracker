@@ -1,0 +1,29 @@
+{
+  "name": "Budget Margin",
+  "short_name": "Budget Margin",
+  "description": "Local-first budgeting with notification capture inbox, historical migration, statement reconciliation, forecasts, goals and analytics.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#071116",
+  "theme_color": "#08171F",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "./",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ]
+}
