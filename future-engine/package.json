@@ -1,0 +1,7 @@
+{
+  "name": "budget-margin-future-engine",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "vitest run", "build": "node build.mjs" },
+  "devDependencies": { "esbuild": "^0.28.2", "typescript": "^7.0.2", "vitest": "^5.0.5" }
+}

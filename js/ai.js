@@ -5,6 +5,7 @@
 import { S, AIC, saveAIC } from "./state.js";
 import { iso, today, pIso, days, addDays, money, rmf } from "./util.js";
 import * as C from "./calc.js";
+import { futureContext } from "./future/plan.js";
 
 export const aiOn = () => !!(AIC.on && AIC.url && AIC.appKey);
 export const aiBase = () => String(AIC.url || "").trim().replace(/\/+$/, "");
@@ -205,6 +206,7 @@ export function buildChatContext() {
       if (w2.months != null) L.push("Same budget with " + other + ": " + C.monthNameFromNow(w2.months) + ", interest " + f0(w2.interest) + ".");
     }
   }
+  try { L.push("\n" + futureContext(false)); } catch (e) { L.push("\nLONG-TERM PLAN: unavailable (" + (e && e.message) + ")."); }
   const tx = S.txns.filter(x => pIso(x.date) >= from).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 350);
   L.push("\nSPENDING TRANSACTIONS since " + iso(from) + " (" + tx.length + (tx.length === 350 ? ", most recent 350" : "") + "; date | S$ | envelope | merchant or note | account):");
   for (const x of tx) L.push(x.date + " | " + ((x.sgd || 0) / 100).toFixed(2) + (x.cur === "MYR" ? " (RM" + ((x.orig || 0) / 100).toFixed(2) + ")" : "") + " | " + C.catName(x.cat) + " | " + (x.note || "-") + " | " + (x.account ? C.accountName(x.account) : "-"));
@@ -227,6 +229,9 @@ Proposal types (amounts in S$ as plain numbers):
   {"type":"envelope_cap","envelope":"<exact envelope name>","cap":350}
   {"type":"daily_cap","amount":40}   (0 removes the daily limit)
   {"type":"goal","name":"<goal name>","target":10000,"per_period":300,"target_date":"YYYY-MM-DD or null"}
+  {"type":"future_task","month":"YYYY-MM","text":"<one concrete action, under 120 characters>"}   (adds an action to that month's list in the Future tab)
+  {"type":"future_saving","monthly":1200}   (changes the long-term plan's fixed monthly saving)
+For questions about CPF, the long-term plan, check-ins or "what should I do this month", use LONG-TERM PLAN. Compare check-ins with the plan, name the biggest gap, and propose at most three future_task actions for the current or next month. Flag any plan assumption marked PLACEHOLDER. Never present CPF balances as cash.
 Only propose when the user asks for a new plan, a change, or advice on what to set. Base a debt plan on the WHAT-IF table and their envelope/free-margin numbers so it is affordable.
 Reply with JSON only: {"reply":"<answer, may use **bold** and - bullets>","proposals":[...]} (proposals may be empty).`;
 
