@@ -1,9 +1,9 @@
 /* Budget Margin 4 service worker: app shell cached for offline use; data never touches it. */
-const CACHE = "budget-margin-shell-v41";
+const CACHE = "budget-margin-shell-v42";
 const SHELL = [
   "./", "./index.html", "./css/app.css", "./manifest.webmanifest",
   "./js/main.js", "./js/util.js", "./js/state.js", "./js/calc.js", "./js/ai.js", "./js/imports.js", "./js/proposals.js",
-  "./js/ui/core.js", "./js/ui/entry.js", "./js/ui/home.js", "./js/ui/activity.js", "./js/ui/plan.js", "./js/ui/importui.js", "./js/ui/ask.js", "./js/ui/settings.js",
+  "./js/ui/core.js", "./js/ui/entry.js", "./js/ui/home.js", "./js/ui/activity.js", "./js/ui/plan.js", "./js/ui/importui.js", "./js/ui/ask.js", "./js/ui/settings.js", "./js/ui/future.js", "./js/future/plan.js", "./js/future/engine.js",
   "./icon-180.png", "./icon-192.png", "./icon-512.png",
 ];
 

@@ -17,6 +17,8 @@ const SUGGEST = [
   "How far am I from clearing my debt, given how I've actually been paying?",
   "Set a new debt plan that fits my budget",
   "Which envelopes am I overspending most often?",
+  "Am I on track with my CPF and savings plan?",
+  "What should I do this month for my long-term plan?",
 ];
 
 export function renderAsk(root) {

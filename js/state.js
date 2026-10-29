@@ -3,11 +3,15 @@
    3.7 can still open anything 4.0 writes (new fields are additive and ignored by 3.7). */
 
 export const KEY = "margin.v2", PREV_KEY = "margin.v2.prev", AI_KEY = "margin.ai", CHAT_KEY = "margin.chat";
-export const APP_VERSION = "4.0";
+export const APP_VERSION = "4.1";
 
 const hasLS = (() => { try { return typeof localStorage !== "undefined" && !!localStorage; } catch (e) { return false; } })();
 const lsGet = k => { try { return hasLS ? localStorage.getItem(k) : null; } catch (e) { return null; } };
 const lsSet = (k, v) => { if (!hasLS) return true; try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
+
+/* Future tab: plan assumptions (engine config, dollars; null = defaults), monthly check-ins (cents),
+   ticked actions by month, your own actions, and the one-off setup list */
+export const blankFuture = () => ({ cfg: null, checkins: [], done: {}, custom: [], setup: {}, rebase: true });
 
 export function blank() {
   return {
@@ -24,6 +28,7 @@ export function blank() {
     ],
     debts: [], txns: [], pays: [], recs: [], bookmarks: [], accounts: [], recurring: [], recurringDone: {}, defaultAccount: "",
     ledger: [], goals: [], goalContrib: [], imports: [], merchantRules: {}, merchantAliases: {}, captures: [], historicalImports: [],
+    future: blankFuture(),
   };
 }
 
@@ -42,6 +47,11 @@ export function normalize(p) {
   if (p.debtPlan.monthlyBudget == null) p.debtPlan.monthlyBudget = 0;
   p.debts.forEach(x => { if (x.minPay == null) x.minPay = 0; if (x.start == null) x.start = x.bal || 0; });
   p.accounts.forEach(a => { if (a.baseBalance == null) a.baseBalance = a.balance || 0; if (!a.snapshotAt) a.snapshotAt = Date.now(); });
+  if (!p.future || typeof p.future !== "object" || Array.isArray(p.future)) p.future = blankFuture();
+  const fb = blankFuture();
+  for (const k in fb) if (!(k in p.future)) p.future[k] = fb[k];
+  ["checkins", "custom"].forEach(k => { if (!Array.isArray(p.future[k])) p.future[k] = []; });
+  ["done", "setup"].forEach(k => { if (!p.future[k] || typeof p.future[k] !== "object" || Array.isArray(p.future[k])) p.future[k] = {}; });
   if (!p.theme) p.theme = "midnight";
   if (!p.accent) p.accent = "jade";
   if (!p.defaultAccount) p.defaultAccount = "";

@@ -4,10 +4,11 @@ import { S, save, uid } from "../state.js";
 import * as C from "../calc.js";
 import { openSheet, closeSheet, toast, confirmSheet, field, options, accountOptions, moneyInput, toggleRow, val, checked, badge } from "./core.js";
 import { logSpend } from "./entry.js";
+import { renderFuture, initFuture, setFutureRerender } from "./future.js";
 
 let go = () => { }, hooks = {};
-export const initPlan = (nav, hk) => { go = nav; hooks = hk || {}; };
-const TABS = [["overview", "Overview"], ["bills", "Bills"], ["goals", "Goals"], ["debt", "Debt"], ["accounts", "Accounts"]];
+export const initPlan = (nav, hk) => { go = nav; hooks = hk || {}; initFuture(nav); };
+const TABS = [["overview", "Overview"], ["bills", "Bills"], ["goals", "Goals"], ["debt", "Debt"], ["accounts", "Accounts"], ["future", "Future"]];
 let tab = "overview";
 export const setPlanTab = t => { if (TABS.some(x => x[0] === t)) tab = t; };
 
@@ -16,7 +17,8 @@ export function renderPlan(root) {
     h("div.bar", h("h1", "Plan"), h("div.bar-actions", h("button.icon-btn", { type: "button", "aria-label": "Settings", html: icon("gear"), onclick: () => go("settings") }))),
     h("div.seg.plan-tabs", { role: "tablist" }, TABS.map(([k, l]) => h("button", { type: "button", role: "tab", "aria-pressed": tab === k ? "true" : "false", "aria-selected": tab === k ? "true" : "false", onclick: () => { tab = k; haptic(3); renderPlan(root); } }, l))));
   const body = h("div"); root.appendChild(body);
-  ({ overview, bills, goals, debt, accounts })[tab](body);
+  setFutureRerender(() => renderPlan(root));
+  ({ overview, bills, goals, debt, accounts, future: renderFuture })[tab](body);
 }
 const sec = (title, action, ...kids) => h("div.section", h("div.section-head", h("h2", title), action), ...kids);
 const addLink = (label, fn) => h("button.link", { type: "button", onclick: fn }, label);

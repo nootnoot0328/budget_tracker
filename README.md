@@ -1,3 +1,38 @@
+# Budget Margin 4.1 — Future (long-term salary, CPF and savings plan)
+
+**Plan › Future** tracks the long-term plan month by month, on the phone, with no new Worker.
+
+- **Monthly check-in**:
+  - From your payslip: basic, allowances, bonus, employee and employer CPF.
+  - From the CPF app: OA, SA or RA, MediSave.
+  - Savings: cash, FD, SSB/bonds, other investments.
+  - This month: spent and saved. Spending is pre-filled from what you logged in Budget Margin.
+- **Plan vs actual**: each check-in is compared with the original plan's balances for that month. The chart shows the plan as a dashed line and your check-ins as dots.
+- **Projection from your real numbers**: optional and on by default. The plan re-runs from your latest check-in's pay and balances. The original plan stays the yardstick.
+- **This month's actions**: built from the plan's events for that month:
+  - Increments and promotions
+  - Bonus, AWS and lump sum, with the amount to save
+  - FD maturities and SSB applications
+  - Savings shortfalls and the age-55 transition
+  - January refresh and December top-up decision
+  - Your own actions
+  A Home banner shows the open count.
+- **Setup list**: one-off things to confirm (starting balances, birth date, bonus terms, lump-sum policy, expenses, 2026 earnings). Each item links to the right assumption sheet.
+- **Ask** knows the plan:
+  - The chat context includes the plan, check-ins vs plan, this month's actions and upcoming milestones.
+  - Two new proposal cards: *add a plan action* and *change monthly saving*. The second shows the before/after total at 55, recomputed on the phone.
+  - As before, nothing changes until you tap Apply.
+- **Copy summary for Claude**: a plain-text summary of the plan, check-ins and the yearly projection, to paste into a Claude chat.
+- **Import plan**: accepts the scenario JSON from the Salary, CPF & Savings Projector.
+
+**Engine**
+- `js/future/engine.js` is generated from TypeScript in `future-engine/`, which has its own 28 tests. Change the TypeScript, then run `cd future-engine && npm install && npm test && npm run build`. The app itself still has no build step.
+- CPF contribution and allocation tables (2026–2027), wage ceilings, extra interest, BHS/FRS, MediSave overflow and the age-55 RA formation follow official CPF Board sources, verified 29 Oct 2026. FRS after 2027 and BHS after 2026 are projections.
+
+**Data**: everything lives in `margin.v2` under a new `future` key, so it is part of normal backups. Older versions ignore it.
+
+---
+
 # Budget Margin 4.0
 
 A rebuild of Budget Margin: same data, cleaner app, and optional AI that reads things for you and answers questions from your own numbers.

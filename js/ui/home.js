@@ -5,6 +5,7 @@ import * as C from "../calc.js";
 import { pendingCaptures } from "../imports.js";
 import { badge } from "./core.js";
 import { openSpend, logSpend, openEditTxn } from "./entry.js";
+import { actionsFor, ymOf, ymLabel } from "../future/plan.js";
 
 let go = () => { }, hooks = {};
 export function initHome(nav, h2) { go = nav; hooks = h2 || {}; }
@@ -63,6 +64,10 @@ export function renderHome(root) {
   if (g.reserved > 0) banners.appendChild(banner("calendar", "var(--blue)", money(g.reserved, false) + " set aside", (g.reservedBills ? "bills" : "") + (g.reservedBills && g.reservedGoals ? " and " : "") + (g.reservedGoals ? "goals" : "") + " still due this period", () => go("plan", g.reservedBills ? "bills" : "goals")));
   const lp = C.pShift(ps, -1), logged = C.spent(lp, ps);
   if (logged > 0 && !S.recs.some(r => r.p === iso2(lp))) banners.appendChild(banner("check", "var(--jade)", "Check " + C.pLabel(lp) + " against your bank", "You logged " + money(logged, false) + ". Import a statement or enter the total.", () => hooks.monthCheck && hooks.monthCheck(lp)));
+  try {
+    const ym = ymOf(), open = actionsFor(ym).filter(x => !x.done);
+    if (open.length) banners.appendChild(banner("target", "var(--violet)", open.length + (open.length === 1 ? " plan action" : " plan actions") + " for " + ymLabel(ym), open[0].text, () => go("plan", "future")));
+  } catch (e) { console.error(e); }
   if (banners.children.length) root.appendChild(banners);
 
   /* quick logs */
